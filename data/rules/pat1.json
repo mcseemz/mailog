@@ -1,0 +1,16 @@
+{
+	"name":"UNI process",
+	"mailbox":"test@test.com",
+	"folder":"Different3",
+	"subject":"Now (?<field1>\\d+)\\. UNI process (?<field2>\\w+)",
+	"from":"noreply@test.com",
+	"to":".*",
+	"body":[
+		"data1=(?<field3>\\w{5})",
+	],
+	"section": [],
+	"flags":{
+	},
+
+	"template":"template1"
+}

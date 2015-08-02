@@ -1,0 +1,12 @@
+[ 
+{
+	"mailbox":"test@test.com",
+	"password":"",
+	"imap_address":"mx.test.com",
+	"imap_port":143,
+	"smtp_address":"mx.test.com",
+	"smtp_port":25,
+	"smtp_auth":true,
+	"starttls":true
+}
+]

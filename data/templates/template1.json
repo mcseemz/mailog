@@ -1,0 +1,14 @@
+	{
+	"name":"template1",
+	"report":{
+		"records":10,
+		"to":"test@test.com",
+		"mailbox":"test@test.com",
+		"format":[
+			"date	time	field1	field2 field3	from	folder",
+			"<#section>",
+			"<#mdate> <#mtime> <field1>	<field2>		<field3>	mfrom> <#mfolder>",
+		],
+		"subject":"UNI process"
+	}
+}
