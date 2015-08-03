@@ -43,8 +43,6 @@ public class Process implements RunnableFuture{
         threadName = mailbox.mailbox+"/"+folder;
         Thread.currentThread().setName(threadName);
 
-        Pattern fieldsPattern = Pattern.compile("\\(\\?<(\\w+)>");
-
         Folder folder = null;
         try {
             folder = openSession(mailbox, this.folder);
@@ -59,20 +57,6 @@ public class Process implements RunnableFuture{
                     break;
                 }
 
-                Main.Template template = null;
-                System.out.println("check template for rule: "+rule.name);
-                boolean templateFound = false;
-                for (Main.Template testTemplate : templates) {
-                    if (testTemplate.name.equals(rule.template)) {
-                        templateFound=true;
-                        template = testTemplate;
-                        break;
-                    }
-                }
-                if (!templateFound) {
-                    System.out.println("no template found for "+rule.template);
-                    continue;
-                }
 
                 System.out.println("going search");
                 FlagTerm ft = new FlagTerm(new Flags(Flags.Flag.DELETED), false);
@@ -82,164 +66,12 @@ public class Process implements RunnableFuture{
                 Message[] messages = folder.search(ft);
                 System.out.println("for rule " + rule.name + " found total messages:" + messages.length);
 
-                Pattern psubject = Pattern.compile(rule.subject);
 
                 //todo развернуть правила и сообщения, чтобы по сообщению проходились все правила
 
-                int matched = 0;
                 for (Message message : messages) {
-                    String subject = message.getSubject();
-                    if (subject.startsWith("RPT:")) {
-                        System.out.println("report message detected. Skip");
-                        continue;
-                    }
-
-                    boolean messageProcessed = false;
-
-                    try {
-                        Matcher subjectMatcher = psubject.matcher(subject);
-                        if (!subjectMatcher.find()) continue;
-
-                        System.out.println("subject:"+subject);
-
-                        //разбить тело на секции
-                        //для каждой секции формируется свое множество полей
-                        //в это множество попадает и разобранный subject, и метаполя
-                        //проверка на флаги для полей
-
-                        String contentType = message.getContentType();
-                        StringBuilder text = new StringBuilder();
-
-                        System.out.println("contentType:"+contentType);
-
-
-                        if (contentType.contains("multipart")) {
-                            Multipart multipart = (Multipart) message.getContent();
-                            for (int j = 0; j < multipart.getCount(); j++) {
-                                BodyPart bodyPart = multipart.getBodyPart(j);
-                                String bodyPartContentType = bodyPart.getContentType();
-
-                                System.out.println("bodyPartContentType:"+contentType);
-
-                                if (bodyPartContentType.contains("text/plain")) {
-                                    text.append(bodyPart.getContent());
-                                }
-                                else if (bodyPartContentType.contains("text/html")) {
-                                    text.append(bodyPart.getContent());
-                                }
-                                else if (bodyPartContentType.contains("multipart")) {
-                                    multipart = (Multipart) bodyPart.getContent();
-
-                                    for (int k = 0; k < multipart.getCount(); k++) {
-                                        bodyPart = multipart.getBodyPart(k);
-                                        bodyPartContentType = bodyPart.getContentType();
-
-                                        System.out.println("bodyPartContentType:"+contentType);
-
-                                        if (bodyPartContentType.contains("text/plain")) {
-                                            text.append(bodyPart.getContent());
-                                        }
-                                        else if (bodyPartContentType.contains("text/html")) {
-                                            text.append(bodyPart.getContent());
-                                        }
-                                    }
-                                }
-
-                            }
-                        } else if (contentType.contains("text/plain")) {
-                            text.append(message.getContent());
-                        } else if (contentType.contains("text/html")) {
-                            text.append(message.getContent());
-                        }
-
-                        //собрать поля из темы в список
-                        Matcher fieldMatcher = fieldsPattern.matcher(rule.subject);
-                        List<String> subjectFields = new ArrayList<>();
-                        while (fieldMatcher.find()) subjectFields.add(fieldMatcher.group(1));
-
-                        System.out.println("subjectFields found:"+subjectFields);
-
-                        //разбиваем по секциям
-                        //todo бить по всем опмсателям секций, а не только по первому
-                        String[] sections = rule.section.isEmpty()
-                                ? new String[]{text.toString()}
-                                : text.toString().split(rule.section.get(0));
-
-                        System.out.println("sections size:"+sections.length);
-
-section:                for (String section : sections) {
-                            System.out.println("section:"+ section);
-
-                            fieldMatcher.reset();
-                            Map<String, String> record = new HashMap<>();
-
-                            //кладем поля и темы в запись
-                            subjectMatcher.reset();
-                            subjectMatcher.find();
-                            for (int i = 0; i < subjectMatcher.groupCount(); i++) {
-                                record.put(subjectFields.get(i), subjectMatcher.group(i + 1));
-                                record.put(subjectFields.get(i)+"_flags", "s"); //из subject
-                            }
-
-                            //теперь поля из тела
-                            for (String bodyrule : rule.body) {
-                                Matcher bodyMatcher = fieldsPattern.matcher(bodyrule);
-                                List<String> bodyFields = new ArrayList<>();
-                                while (bodyMatcher.find()) bodyFields.add(bodyMatcher.group(1));
-
-                                System.out.println("bodyFields found:"+bodyFields);
-
-                                Pattern pbody = Pattern.compile(bodyrule);
-                                Matcher mbody = pbody.matcher(section);
-                                if (mbody.find())
-                                    for (int i = 0; i < mbody.groupCount(); i++) {
-                                        record.put(bodyFields.get(i).toLowerCase(), mbody.group(i + 1));
-                                        record.put(bodyFields.get(i).toLowerCase()+"_flags", "b");
-                                    }
-                                else System.out.println("not found");
-
-                                //проверка
-                                for (String bodyField : bodyFields) {
-                                    if (bodyField.toUpperCase().equals(bodyField)
-                                            && !record.containsKey(bodyField.toLowerCase())
-                                            ) {
-                                        System.out.println("required field "+bodyField+" not filled");
-                                        continue section; //обязательное поле не заполнено
-                                    }
-                                }
-                            }
-
-                            System.out.println("record done:");
-                            for (Map.Entry<String, String> entry : record.entrySet()) {
-                                System.out.println(entry.getKey()+"="+entry.getValue());
-                            }
-
-                            //record заполнено
-                            //проверяем на флаги полей
-//                            for (Map.Entry<String, String> entryFlag : rule.flags.entrySet()) {
-//                                boolean isRequired = entryFlag.getValue().contains("r");
-//                                if ((!record.containsKey(entryFlag.getKey())
-//                                        || record.get(entryFlag.getKey()).isEmpty())
-//                                        && isRequired) continue section;    //плохо собрали
-//                            }
-
-
-                            template.addRecord(record, message);
-                            messageProcessed = true;
-                            System.out.println("rule: record added");
-                        }
-
-                    } catch (Exception ex) {
-                        ex.printStackTrace(System.out);
-                    }
-
-                    if (messageProcessed) {
-                        boolean done = template.processRecords();
-//                        if (done) folder.expunge();   //сбивает нумерацию
-                        matched++;
-                    }
+                    if (processMessage(rule, message)) continue;
                 }
-                System.out.println("for rule " + rule.name + " matched messages:" + matched);
 
             }
 
@@ -265,6 +97,160 @@ section:                for (String section : sections) {
                 e.printStackTrace();
             }
         }
+    }
+
+    public static boolean processMessage(Main.Rule rule, Message message) throws MessagingException {
+        String subject = message.getSubject();
+        if (subject.startsWith("RPT:")) {
+            System.out.println("report message detected. Skip");
+            return true;
+        }
+
+        boolean messageProcessed = false;
+
+        try {
+            Pattern psubject = Pattern.compile(rule.subject);
+            Matcher subjectMatcher = psubject.matcher(subject);
+            if (!subjectMatcher.find()) return true;
+
+            System.out.println("subject:"+subject);
+
+            //разбить тело на секции
+            //для каждой секции формируется свое множество полей
+            //в это множество попадает и разобранный subject, и метаполя
+            //проверка на флаги для полей
+
+            String contentType = message.getContentType();
+            StringBuilder text = new StringBuilder();
+
+            System.out.println("contentType:"+contentType);
+
+
+            if (contentType.contains("multipart")) {
+                Multipart multipart = (Multipart) message.getContent();
+                for (int j = 0; j < multipart.getCount(); j++) {
+                    BodyPart bodyPart = multipart.getBodyPart(j);
+                    String bodyPartContentType = bodyPart.getContentType();
+
+                    System.out.println("bodyPartContentType:"+contentType);
+
+                    if (bodyPartContentType.contains("text/plain")) {
+                        text.append(bodyPart.getContent());
+                    }
+                    else if (bodyPartContentType.contains("text/html")) {
+                        text.append(bodyPart.getContent());
+                    }
+                    else if (bodyPartContentType.contains("multipart")) {
+                        multipart = (Multipart) bodyPart.getContent();
+
+                        for (int k = 0; k < multipart.getCount(); k++) {
+                            bodyPart = multipart.getBodyPart(k);
+                            bodyPartContentType = bodyPart.getContentType();
+
+                            System.out.println("bodyPartContentType:"+contentType);
+
+                            if (bodyPartContentType.contains("text/plain")) {
+                                text.append(bodyPart.getContent());
+                            }
+                            else if (bodyPartContentType.contains("text/html")) {
+                                text.append(bodyPart.getContent());
+                            }
+                        }
+                    }
+
+                }
+            } else if (contentType.contains("text/plain")) {
+                text.append(message.getContent());
+            } else if (contentType.contains("text/html")) {
+                text.append(message.getContent());
+            }
+
+            //собрать поля из темы в список
+            Matcher fieldMatcher = fieldsPattern.matcher(rule.subject);
+            List<String> subjectFields = new ArrayList<>();
+            while (fieldMatcher.find()) subjectFields.add(fieldMatcher.group(1));
+
+            System.out.println("subjectFields found:"+subjectFields);
+
+            //разбиваем по секциям
+            //todo бить по всем опмсателям секций, а не только по первому
+            String[] sections = rule.section.isEmpty()
+                    ? new String[]{text.toString()}
+                    : text.toString().split(rule.section.get(0));
+
+            System.out.println("sections size:"+sections.length);
+
+section:                for (String section : sections) {
+                System.out.println("section:"+ section);
+
+                fieldMatcher.reset();
+                Map<String, String> record = new HashMap<>();
+
+                //кладем поля и темы в запись
+                subjectMatcher.reset();
+                subjectMatcher.find();
+                for (int i = 0; i < subjectMatcher.groupCount(); i++) {
+                    record.put(subjectFields.get(i), subjectMatcher.group(i + 1));
+                    record.put(subjectFields.get(i)+"_flags", "s"); //из subject
+                }
+
+                //теперь поля из тела
+                for (String bodyrule : rule.body) {
+                    Matcher bodyMatcher = fieldsPattern.matcher(bodyrule);
+                    List<String> bodyFields = new ArrayList<>();
+                    while (bodyMatcher.find()) bodyFields.add(bodyMatcher.group(1));
+
+                    System.out.println("bodyFields found:"+bodyFields);
+
+                    Pattern pbody = Pattern.compile(bodyrule);
+                    Matcher mbody = pbody.matcher(section);
+                    if (mbody.find())
+                        for (int i = 0; i < mbody.groupCount(); i++) {
+                            record.put(bodyFields.get(i).toLowerCase(), mbody.group(i + 1));
+                            record.put(bodyFields.get(i).toLowerCase()+"_flags", "b");
+                        }
+                    else System.out.println("not found");
+
+                    //проверка
+                    for (String bodyField : bodyFields) {
+                        if (bodyField.toUpperCase().equals(bodyField)
+                                && !record.containsKey(bodyField.toLowerCase())
+                                ) {
+                            System.out.println("required field "+bodyField+" not filled");
+                            continue section; //обязательное поле не заполнено
+                        }
+                    }
+                }
+
+                System.out.println("record done:");
+                for (Map.Entry<String, String> entry : record.entrySet()) {
+                    System.out.println(entry.getKey()+"="+entry.getValue());
+                }
+
+                //record заполнено
+                //проверяем на флаги полей
+//                            for (Map.Entry<String, String> entryFlag : rule.flags.entrySet()) {
+//                                boolean isRequired = entryFlag.getValue().contains("r");
+//                                if ((!record.containsKey(entryFlag.getKey())
+//                                        || record.get(entryFlag.getKey()).isEmpty())
+//                                        && isRequired) continue section;    //плохо собрали
+//                            }
+
+
+                rule.templateObject.addRecord(record, message);
+                messageProcessed = true;
+                System.out.println("rule: record added");
+            }
+
+        } catch (Exception ex) {
+            ex.printStackTrace(System.out);
+        }
+
+        if (messageProcessed) {
+            boolean done = rule.templateObject.processRecords();
+            if (done) message.getFolder().expunge();   //сбивает нумерацию
+        }
+        return false;
     }
 
     @Override
@@ -321,4 +307,8 @@ section:                for (String section : sections) {
 
         return true;
     }
+
+
+    final public static Pattern fieldsPattern = Pattern.compile("\\(\\?<(\\w+)>");
+
 }

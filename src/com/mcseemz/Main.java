@@ -2,8 +2,11 @@ package com.mcseemz;
 
 import com.google.gson.GsonBuilder;
 import com.google.gson.stream.JsonReader;
+import com.sun.mail.imap.IdleManager;
 
 import javax.mail.*;
+import javax.mail.event.MessageCountAdapter;
+import javax.mail.event.MessageCountEvent;
 import javax.mail.internet.InternetAddress;
 import javax.mail.internet.MimeMessage;
 import java.io.*;
@@ -19,7 +22,11 @@ import java.util.regex.Pattern;
 
 public class Main {
 
-    public static void main(String[] args) throws IOException {
+    public static void main(String[] args) throws IOException, MessagingException {
+
+        //todo ключи командной строки
+        //todo запуск из командной строки
+        //todo если мониторинг отключен, то не запускать ветку с idleManager
 
         if (args.length>1) workdir = args[1];
         else workdir = System.getProperty("user.dir")+"/data";
@@ -28,9 +35,6 @@ public class Main {
 
         //инициализировать ящики
         Mailbox[] mailboxes = initMailboxes();
-
-        for (Mailbox mailbox : mailboxes)
-            mappedmailboxes.put(mailbox.mailbox, mailbox);
 
         //инициализировать шаблоны
         List<Template> templates = initTemplates();
@@ -42,6 +46,25 @@ public class Main {
 
         //сгруппировать правила по ящикам и папкам
         for (Rule rule : rules) {
+            //проверка, что для этого правила есть шаблон
+            Main.Template template = null;
+            System.out.println("check template for rule: "+rule.name);
+            boolean templateFound = false;
+            for (Main.Template testTemplate : templates) {
+                if (testTemplate.name.equals(rule.template)) {
+                    templateFound=true;
+                    rule.templateObject = testTemplate;
+                    break;
+                }
+            }
+            if (!templateFound) {
+                System.out.println("no template found for "+rule.template);
+                continue;
+            }
+            /*todo если шаблонов несколько, то поменять принцип
+            выкидывать отсутствующие шаблоны из правила. Если вообще не осталось шаблонов, то выкинуть правило*/
+
+
             String key = rule.mailbox+"#"+rule.folder;
             if (!mappedrules.containsKey(key))
                 mappedrules.put(key, new ArrayList<Rule>());
@@ -61,27 +84,61 @@ public class Main {
             }
         }
 
-        ExecutorService executorService = Executors.newFixedThreadPool(5);
+        System.out.println("rules inited");
+        //инициализация idle сессий
+        for (Mailbox mailbox : mailboxes) {
+            mappedmailboxes.put(mailbox.mailbox, mailbox);
+            mappedIdleSessions.put(mailbox.mailbox, openIdleManagerSession(mailbox));
+            mappedIdleManagers.put(mailbox.mailbox, new IdleManager(mappedIdleSessions.get(mailbox.mailbox), Main.listenerExecutor));
+        }
 
-        //запустить основной поток
+        //инициализация обработчиков idle
         for (Map.Entry<String, List<Rule>> entry : mappedrules.entrySet()) {
-            Process process = new Process(mappedmailboxes.get(entry.getValue().get(0).mailbox), entry.getValue().get(0).folder, templates, entry.getValue());
+            Folder folder = null;
+            try {
+                Session session = mappedIdleSessions.get(entry.getValue().get(0).mailbox);
+                Store store = session.getStore("imap");
+                if (!store.isConnected()) {
+                    Mailbox mailbox = mappedmailboxes.get(entry.getValue().get(0).mailbox);
+                    store.connect(mailbox.imap_address, mailbox.imap_port, mailbox.mailbox, mailbox.password);
+                }
+                folder = store.getFolder(entry.getValue().get(0).folder);
+                folder.open(Folder.READ_WRITE);
 
-            futureList.add(executorService.submit(process));
-        }
-        //проверка что все потоки отработали
-//        executorService.
-        while (true) {
-            boolean allFinished = true;
-            for (Future future : futureList) {
-                if (!future.isDone()) allFinished = false;
+                IdleManager idleManager = mappedIdleManagers.get(entry.getValue().get(0).mailbox);
+
+                folder.addMessageCountListener(new IdleAdapter(idleManager, session, entry.getValue()));
+                idleManager.watch(folder);
+
+            } catch (Exception e) {
+                e.printStackTrace(System.out);
             }
-
-            if (allFinished) break;
         }
-        executorService.shutdownNow();
-        System.exit(0);
 
+//        Thread inbox = new Thread(new RPTThread(mappedmailboxes.get("m.zarudnyak@bgoperator.com"), "INBOX", templates, rules));
+//        inbox.start();
+
+//        ExecutorService executorService = Executors.newFixedThreadPool(5);
+//        //запустить основной поток
+//        for (Map.Entry<String, List<Rule>> entry : mappedrules.entrySet()) {
+//            Process process = new Process(mappedmailboxes.get(entry.getValue().get(0).mailbox), entry.getValue().get(0).folder, templates, entry.getValue());
+//            futureList.add(executorService.submit(process));
+//        }
+//
+//        //проверка что все потоки отработали
+////        executorService.
+//        while (true) {
+//            boolean allFinished = true;
+//            for (Future future : futureList) {
+//                if (!future.isDone()) allFinished = false;
+//            }
+//
+//            if (allFinished) break;
+//        }
+//
+//        executorService.shutdownNow();
+//        System.exit(0);
+        System.out.println("main thread exits;");
     }
 
     private static Mailbox[] initMailboxes() throws FileNotFoundException {
@@ -396,6 +453,25 @@ public class Main {
 
     }
 
+    private static Session openIdleManagerSession(Main.Mailbox mailbox) throws MessagingException {
+        Properties props = System.getProperties();
+        props.setProperty("mail.store.protocol", "imap");
+        props.setProperty("mail.imap.usesocketchannels", "true");
+
+        Session imapsession = Session.getDefaultInstance(props, null);
+        imapsession.setDebug(true);
+//        for (Provider provider : imapsession.getProviders())
+//            System.out.println("we have idle provider:"+provider.getProtocol()+" "+provider.getType()+" "+provider.getClassName());
+//        Store store = imapsession.getStore("imap");
+//				Store store = imapsession.getStore("imaps");
+//        store.connect(mailbox.imap_address, mailbox.imap_port, mailbox.mailbox, mailbox.password);
+//        store.getFolder("INBOX");
+
+        System.out.println("opening idleSession done");
+        return imapsession;
+    }
+
+
     public static class Rule {
         String name;
         String mailbox;
@@ -407,17 +483,22 @@ public class Main {
         List<String> section = new ArrayList<>();
         Map<String,String> flags = new HashMap<>();
         String template;
+        Template templateObject;
     }
 
     private static String workdir;
 
     /** mapping mailbox name to object*/
     private static final Map<String, Mailbox> mappedmailboxes = new HashMap<>();
-    private static List<Future> futureList = new ArrayList<>();
+    private static final Map<String, IdleManager> mappedIdleManagers = new HashMap<>();
+    private static final Map<String, Session> mappedIdleSessions = new HashMap<>();
 
     final static String KEYWORD_SECTION = "#section";
     final static String KEYWORD_DATE = "#mdate";
     final static String KEYWORD_TIME = "#mtime";
     final static String KEYWORD_FROM = "#mfrom";
     final static String KEYWORD_FOLDER = "#mfolder";
+
+    /** Executor service for idleListeners */
+    public static final ExecutorService listenerExecutor = Executors.newCachedThreadPool();
 }
