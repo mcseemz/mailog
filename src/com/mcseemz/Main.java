@@ -1,7 +1,9 @@
 package com.mcseemz;
 
+import ca.zmatrix.cli.ParseCmd;
 import com.google.gson.GsonBuilder;
 import com.google.gson.stream.JsonReader;
+import com.sun.mail.imap.IdleManager;
 
 import javax.mail.*;
 import javax.mail.internet.InternetAddress;
@@ -9,6 +11,7 @@ import javax.mail.internet.MimeMessage;
 import java.io.*;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.concurrent.ExecutorService;
@@ -19,18 +22,52 @@ import java.util.regex.Pattern;
 
 public class Main {
 
-    public static void main(String[] args) throws IOException {
+    public static void main(String[] args) throws IOException, MessagingException {
+        //https://code.google.com/p/parse-cmd/
+        String usage = "usage: [-help] [-nomonitor] [-archive [YYYY-MM-DD]] [-workdir path_to_data]\n" +
+                "options:\n" +
+                "   archive    -   processes all messages before selected date, inclusive. If date not specified, uses today.\n" +
+                "   nomonitor  -   disable folder monitoring for new messages. Alerts will be disabled.\n" +
+                "   workdir    -   path to another folder with data\n";
+        ParseCmd cli = new ParseCmd.Builder()
+                .help(usage)
+                .parm("-nomonitor","0")
+                .parm("-help", "0")
+                .parm("-archive", "0").rex("\\d{4}-\\d{2}-\\d{2}")
+                .parm("-workdir", "0").build();
 
-        if (args.length>1) workdir = args[1];
+        Map<String,String> R = new HashMap<>();
+        String parseError    = cli.validate(args);
+        if( cli.isValid(args) ) {
+            R = cli.parse(args);
+            System.out.println(cli.displayMap(R));
+        }
+        else { System.out.println(parseError); System.exit(1); }
+
+        // R contains default or input values for defined parms and used as in:
+        // long loop = Long.parseLong( R.get("-loop"));
+        boolean isNomonitor = R.<String>get("-nomonitor").equals("1");
+        boolean isArchive = !R.<String>get("-archive").equals("0");
+        Date datebefore = null;
+
+        SimpleDateFormat YMD = new SimpleDateFormat("yyyy-MM-dd");
+        if (!R.<String>get("-archive").equals("0")) try {
+            datebefore = YMD.parse(R.<String>get("-archive"));
+            datebefore.setTime(datebefore.getTime()+3600*24*1000-1);    //до конца суток
+        } catch (ParseException e) {
+            System.out.println("wrong date format");
+            System.exit(-1);
+        }
+
+        if (!R.<String>get("-workdir").equals("0")) {
+            workdir = R.<String>get("-workdir");
+        }
         else workdir = System.getProperty("user.dir")+"/data";
 
         System.out.println("using workdir:"+workdir);
 
         //инициализировать ящики
         Mailbox[] mailboxes = initMailboxes();
-
-        for (Mailbox mailbox : mailboxes)
-            mappedmailboxes.put(mailbox.mailbox, mailbox);
 
         //инициализировать шаблоны
         List<Template> templates = initTemplates();
@@ -42,6 +79,25 @@ public class Main {
 
         //сгруппировать правила по ящикам и папкам
         for (Rule rule : rules) {
+            //проверка, что для этого правила есть шаблон
+            Main.Template template = null;
+            System.out.println("check template for rule: "+rule.name);
+            boolean templateFound = false;
+            for (Main.Template testTemplate : templates) {
+                if (testTemplate.name.equals(rule.template)) {
+                    templateFound=true;
+                    rule.templateObject = testTemplate;
+                    break;
+                }
+            }
+            if (!templateFound) {
+                System.out.println("no template found for "+rule.template);
+                continue;
+            }
+            /*todo если шаблонов несколько, то поменять принцип
+            выкидывать отсутствующие шаблоны из правила. Если вообще не осталось шаблонов, то выкинуть правило*/
+
+
             String key = rule.mailbox+"#"+rule.folder;
             if (!mappedrules.containsKey(key))
                 mappedrules.put(key, new ArrayList<Rule>());
@@ -61,27 +117,68 @@ public class Main {
             }
         }
 
-        ExecutorService executorService = Executors.newFixedThreadPool(5);
-
-        //запустить основной поток
-        for (Map.Entry<String, List<Rule>> entry : mappedrules.entrySet()) {
-            Process process = new Process(mappedmailboxes.get(entry.getValue().get(0).mailbox), entry.getValue().get(0).folder, templates, entry.getValue());
-
-            futureList.add(executorService.submit(process));
+        System.out.println("rules inited");
+        //инициализация idle сессий
+        for (Mailbox mailbox : mailboxes) {
+            mappedmailboxes.put(mailbox.mailbox, mailbox);
+            if (!isNomonitor) {
+                mappedIdleSessions.put(mailbox.mailbox, openIdleManagerSession(mailbox));
+                mappedIdleManagers.put(mailbox.mailbox, new IdleManager(mappedIdleSessions.get(mailbox.mailbox), Main.listenerExecutor));
+            }
         }
-        //проверка что все потоки отработали
-//        executorService.
-        while (true) {
-            boolean allFinished = true;
-            for (Future future : futureList) {
-                if (!future.isDone()) allFinished = false;
+
+        //инициализация обработчиков idle
+        if (!isNomonitor)
+        for (Map.Entry<String, List<Rule>> entry : mappedrules.entrySet()) {
+            Folder folder = null;
+            try {
+                Session session = mappedIdleSessions.get(entry.getValue().get(0).mailbox);
+                Store store = session.getStore("imap");
+                if (!store.isConnected()) {
+                    Mailbox mailbox = mappedmailboxes.get(entry.getValue().get(0).mailbox);
+                    store.connect(mailbox.imap_address, mailbox.imap_port, mailbox.mailbox, mailbox.password);
+                }
+                folder = store.getFolder(entry.getValue().get(0).folder);
+                folder.open(Folder.READ_WRITE);
+
+                IdleManager idleManager = mappedIdleManagers.get(entry.getValue().get(0).mailbox);
+
+                folder.addMessageCountListener(new IdleAdapter(idleManager, session, entry.getValue()));
+                idleManager.watch(folder);
+
+            } catch (Exception e) {
+                e.printStackTrace(System.out);
+            }
+        }
+
+
+//перевести на фильтры почтового ящика?
+//        Thread inbox = new Thread(new RPTThread(mappedmailboxes.get("m.zarudnyak@bgoperator.com"), "INBOX", templates, rules));
+//        inbox.start();
+
+        if (isArchive) {
+            ExecutorService executorService = Executors.newFixedThreadPool(5);
+            //запустить основной поток
+            for (Map.Entry<String, List<Rule>> entry : mappedrules.entrySet()) {
+                Archive process = new Archive(mappedmailboxes.get(entry.getValue().get(0).mailbox), entry.getValue().get(0).folder, templates, entry.getValue(), datebefore);
+                archiveList.add(executorService.submit(process));
             }
 
-            if (allFinished) break;
-        }
-        executorService.shutdownNow();
-        System.exit(0);
+            //проверка что все потоки отработали
+//        executorService.
+            while (true) {
+                boolean allFinished = true;
+                for (Future future : archiveList) {
+                    if (!future.isDone()) allFinished = false;
+                }
 
+                if (allFinished) break;
+            }
+
+            executorService.shutdownNow();
+        }
+//        System.exit(0);
+        System.out.println("main thread exits;");
     }
 
     private static Mailbox[] initMailboxes() throws FileNotFoundException {
@@ -396,6 +493,25 @@ public class Main {
 
     }
 
+    private static Session openIdleManagerSession(Main.Mailbox mailbox) throws MessagingException {
+        Properties props = System.getProperties();
+        props.setProperty("mail.store.protocol", "imap");
+        props.setProperty("mail.imap.usesocketchannels", "true");
+
+        Session imapsession = Session.getDefaultInstance(props, null);
+        imapsession.setDebug(true);
+//        for (Provider provider : imapsession.getProviders())
+//            System.out.println("we have idle provider:"+provider.getProtocol()+" "+provider.getType()+" "+provider.getClassName());
+//        Store store = imapsession.getStore("imap");
+//				Store store = imapsession.getStore("imaps");
+//        store.connect(mailbox.imap_address, mailbox.imap_port, mailbox.mailbox, mailbox.password);
+//        store.getFolder("INBOX");
+
+        System.out.println("opening idleSession done");
+        return imapsession;
+    }
+
+
     public static class Rule {
         String name;
         String mailbox;
@@ -407,17 +523,23 @@ public class Main {
         List<String> section = new ArrayList<>();
         Map<String,String> flags = new HashMap<>();
         String template;
+        Template templateObject;
     }
 
     private static String workdir;
 
     /** mapping mailbox name to object*/
     private static final Map<String, Mailbox> mappedmailboxes = new HashMap<>();
-    private static List<Future> futureList = new ArrayList<>();
+    private static final Map<String, IdleManager> mappedIdleManagers = new HashMap<>();
+    private static final Map<String, Session> mappedIdleSessions = new HashMap<>();
+    private static List<Future> archiveList = new ArrayList<>();
 
     final static String KEYWORD_SECTION = "#section";
     final static String KEYWORD_DATE = "#mdate";
     final static String KEYWORD_TIME = "#mtime";
     final static String KEYWORD_FROM = "#mfrom";
     final static String KEYWORD_FOLDER = "#mfolder";
+
+    /** Executor service for idleListeners */
+    public static final ExecutorService listenerExecutor = Executors.newCachedThreadPool();
 }
