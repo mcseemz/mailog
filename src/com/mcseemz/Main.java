@@ -151,6 +151,8 @@ public class Main {
             }
         }
 
+
+//перевести на фильтры почтового ящика?
 //        Thread inbox = new Thread(new RPTThread(mappedmailboxes.get("m.zarudnyak@bgoperator.com"), "INBOX", templates, rules));
 //        inbox.start();
 
