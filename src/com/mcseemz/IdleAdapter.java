@@ -35,7 +35,7 @@ public class IdleAdapter extends MessageCountAdapter {
             for (Main.Rule rule : rules) {
                 try {
                     synchronized (imapsession) {
-                        Process.processMessage(rule, message);
+                        Archive.processMessage(rule, message);
                     }
                 } catch (MessagingException e) {
                     e.printStackTrace();

@@ -1,17 +1,17 @@
 package com.mcseemz;
 
+import ca.zmatrix.cli.ParseCmd;
 import com.google.gson.GsonBuilder;
 import com.google.gson.stream.JsonReader;
 import com.sun.mail.imap.IdleManager;
 
 import javax.mail.*;
-import javax.mail.event.MessageCountAdapter;
-import javax.mail.event.MessageCountEvent;
 import javax.mail.internet.InternetAddress;
 import javax.mail.internet.MimeMessage;
 import java.io.*;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.concurrent.ExecutorService;
@@ -23,12 +23,45 @@ import java.util.regex.Pattern;
 public class Main {
 
     public static void main(String[] args) throws IOException, MessagingException {
+        //https://code.google.com/p/parse-cmd/
+        String usage = "usage: [-help] [-nomonitor] [-archive [YYYY-MM-DD]] [-workdir path_to_data]\n" +
+                "options:\n" +
+                "   archive    -   processes all messages before selected date, inclusive. If date not specified, uses today.\n" +
+                "   nomonitor  -   disable folder monitoring for new messages. Alerts will be disabled.\n" +
+                "   workdir    -   path to another folder with data\n";
+        ParseCmd cli = new ParseCmd.Builder()
+                .help(usage)
+                .parm("-nomonitor","0")
+                .parm("-help", "0")
+                .parm("-archive", "0").rex("\\d{4}-\\d{2}-\\d{2}")
+                .parm("-workdir", "0").build();
 
-        //todo ключи командной строки
-        //todo запуск из командной строки
-        //todo если мониторинг отключен, то не запускать ветку с idleManager
+        Map<String,String> R = new HashMap<>();
+        String parseError    = cli.validate(args);
+        if( cli.isValid(args) ) {
+            R = cli.parse(args);
+            System.out.println(cli.displayMap(R));
+        }
+        else { System.out.println(parseError); System.exit(1); }
 
-        if (args.length>1) workdir = args[1];
+        // R contains default or input values for defined parms and used as in:
+        // long loop = Long.parseLong( R.get("-loop"));
+        boolean isNomonitor = R.<String>get("-nomonitor").equals("1");
+        boolean isArchive = !R.<String>get("-archive").equals("0");
+        Date datebefore = null;
+
+        SimpleDateFormat YMD = new SimpleDateFormat("yyyy-MM-dd");
+        if (!R.<String>get("-archive").equals("0")) try {
+            datebefore = YMD.parse(R.<String>get("-archive"));
+            datebefore.setTime(datebefore.getTime()+3600*24*1000-1);    //до конца суток
+        } catch (ParseException e) {
+            System.out.println("wrong date format");
+            System.exit(-1);
+        }
+
+        if (!R.<String>get("-workdir").equals("0")) {
+            workdir = R.<String>get("-workdir");
+        }
         else workdir = System.getProperty("user.dir")+"/data";
 
         System.out.println("using workdir:"+workdir);
@@ -88,11 +121,14 @@ public class Main {
         //инициализация idle сессий
         for (Mailbox mailbox : mailboxes) {
             mappedmailboxes.put(mailbox.mailbox, mailbox);
-            mappedIdleSessions.put(mailbox.mailbox, openIdleManagerSession(mailbox));
-            mappedIdleManagers.put(mailbox.mailbox, new IdleManager(mappedIdleSessions.get(mailbox.mailbox), Main.listenerExecutor));
+            if (!isNomonitor) {
+                mappedIdleSessions.put(mailbox.mailbox, openIdleManagerSession(mailbox));
+                mappedIdleManagers.put(mailbox.mailbox, new IdleManager(mappedIdleSessions.get(mailbox.mailbox), Main.listenerExecutor));
+            }
         }
 
         //инициализация обработчиков idle
+        if (!isNomonitor)
         for (Map.Entry<String, List<Rule>> entry : mappedrules.entrySet()) {
             Folder folder = null;
             try {
@@ -118,25 +154,27 @@ public class Main {
 //        Thread inbox = new Thread(new RPTThread(mappedmailboxes.get("m.zarudnyak@bgoperator.com"), "INBOX", templates, rules));
 //        inbox.start();
 
-//        ExecutorService executorService = Executors.newFixedThreadPool(5);
-//        //запустить основной поток
-//        for (Map.Entry<String, List<Rule>> entry : mappedrules.entrySet()) {
-//            Process process = new Process(mappedmailboxes.get(entry.getValue().get(0).mailbox), entry.getValue().get(0).folder, templates, entry.getValue());
-//            futureList.add(executorService.submit(process));
-//        }
-//
-//        //проверка что все потоки отработали
-////        executorService.
-//        while (true) {
-//            boolean allFinished = true;
-//            for (Future future : futureList) {
-//                if (!future.isDone()) allFinished = false;
-//            }
-//
-//            if (allFinished) break;
-//        }
-//
-//        executorService.shutdownNow();
+        if (isArchive) {
+            ExecutorService executorService = Executors.newFixedThreadPool(5);
+            //запустить основной поток
+            for (Map.Entry<String, List<Rule>> entry : mappedrules.entrySet()) {
+                Archive process = new Archive(mappedmailboxes.get(entry.getValue().get(0).mailbox), entry.getValue().get(0).folder, templates, entry.getValue(), datebefore);
+                archiveList.add(executorService.submit(process));
+            }
+
+            //проверка что все потоки отработали
+//        executorService.
+            while (true) {
+                boolean allFinished = true;
+                for (Future future : archiveList) {
+                    if (!future.isDone()) allFinished = false;
+                }
+
+                if (allFinished) break;
+            }
+
+            executorService.shutdownNow();
+        }
 //        System.exit(0);
         System.out.println("main thread exits;");
     }
@@ -492,6 +530,7 @@ public class Main {
     private static final Map<String, Mailbox> mappedmailboxes = new HashMap<>();
     private static final Map<String, IdleManager> mappedIdleManagers = new HashMap<>();
     private static final Map<String, Session> mappedIdleSessions = new HashMap<>();
+    private static List<Future> archiveList = new ArrayList<>();
 
     final static String KEYWORD_SECTION = "#section";
     final static String KEYWORD_DATE = "#mdate";

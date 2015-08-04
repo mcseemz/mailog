@@ -1,0 +1,5 @@
+Manifest-Version: 1.0
+Class-Path: lib/gson-2.1.jar lib/javax.mail.jar lib/parsecmd-0.0.93.ja
+ r
+Main-Class: com.mcseemz.Main
+

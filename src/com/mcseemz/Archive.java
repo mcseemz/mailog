@@ -18,7 +18,7 @@ import java.util.regex.Pattern;
  * Created by mcseem on 24.07.15.
  * process thread
  */
-public class Process implements RunnableFuture{
+public class Archive implements RunnableFuture{
 
     private Main.Mailbox mailbox;
     private String folder;
@@ -27,14 +27,16 @@ public class Process implements RunnableFuture{
     private String threadName = "default";
     private boolean shouldCancel = false;
     private boolean isCancelled = false;
+    private Date datebefore = null;
     Session imapsession = null;
     Store store = null;
 
-    public Process(Main.Mailbox mailbox, String folder, List<Main.Template> templates, List<Main.Rule> rules) {
+    public Archive(Main.Mailbox mailbox, String folder, List<Main.Template> templates, List<Main.Rule> rules, Date datebefore) {
         this.mailbox = mailbox;
         this.folder = folder;
         this.templates = templates;
         this.rules = rules;
+        this.datebefore = datebefore;
     }
 
     @Override
@@ -50,37 +52,27 @@ public class Process implements RunnableFuture{
             System.out.println("folder opened");
             System.out.println("rules.size "+rules.size());
             //идем по правилам
-            for (Main.Rule rule : rules) {
-                if (shouldCancel) {
-                    isCancelled = true;
-                    System.out.println("should cancel detected");
-                    break;
-                }
 
-
-                System.out.println("going search");
-                FlagTerm ft = new FlagTerm(new Flags(Flags.Flag.DELETED), false);
+            System.out.println("going search");
+            FlagTerm ft = new FlagTerm(new Flags(Flags.Flag.DELETED), false);
 //                SearchTerm st = new SubjectTerm(rule.subject);
 //                AndTerm andTerm = new AndTerm(ft,st);
 //                Message[] messages = folder.search(andTerm);
-                Message[] messages = folder.search(ft);
-                System.out.println("for rule " + rule.name + " found total messages:" + messages.length);
+            Message[] messages = folder.search(ft);
+            System.out.println("for folder " + folder + " found total messages:" + messages.length);
 
+            for (Message message : messages) {
+                for (Main.Rule rule : rules) {
+                    if (shouldCancel) {
+                        isCancelled = true;
+                        System.out.println("should cancel detected");
+                        break;
+                    }
+                    if (datebefore!=null && message.getSentDate().compareTo(datebefore)>0) continue;    //ограничение по датам
 
-                //todo развернуть правила и сообщения, чтобы по сообщению проходились все правила
-
-                for (Message message : messages) {
-                    if (processMessage(rule, message)) continue;
+                    processMessage(rule, message);
                 }
-
             }
-
-//            FetchProfile fp = new FetchProfile();
-//            fp.add(FetchProfile.Item.ENVELOPE);
-//            fp.add("X-mailer");
-//            inbox.fetch(messages, fp);
-
-
         } catch (Exception e) {
             e.printStackTrace(System.out);
 
