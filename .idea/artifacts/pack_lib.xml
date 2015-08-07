@@ -3,9 +3,7 @@
     <output-path>$PROJECT_DIR$/out/artifacts/mailog</output-path>
     <root id="root">
       <element id="directory" name="lib">
-        <element id="file-copy" path="$PROJECT_DIR$/lib/gson-2.1.jar" />
-        <element id="file-copy" path="$PROJECT_DIR$/lib/javax.mail.jar" />
-        <element id="file-copy" path="$PROJECT_DIR$/lib/parsecmd-0.0.93.jar" />
+        <element id="dir-copy" path="$PROJECT_DIR$/lib" />
       </element>
       <element id="directory" name="data">
         <element id="dir-copy" path="$PROJECT_DIR$/data" />

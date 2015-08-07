@@ -24,15 +24,17 @@ public class Main {
 
     public static void main(String[] args) throws IOException, MessagingException {
         //https://code.google.com/p/parse-cmd/
-        String usage = "usage: [-help] [-nomonitor] [-archive [YYYY-MM-DD]] [-workdir path_to_data]\n" +
+        String usage = "usage: [-help] [-nomonitor] [-archive YYYY-MM-DD] [-archiveall] [-workdir path_to_data]\n" +
                 "options:\n" +
-                "   archive    -   processes all messages before selected date, inclusive. If date not specified, uses today.\n" +
+                "   archive    -   processes all messages before selected date, inclusive.\n" +
+                "   archiveall    -   processes all messages before selected date, inclusive.\n" +
                 "   nomonitor  -   disable folder monitoring for new messages. Alerts will be disabled.\n" +
                 "   workdir    -   path to another folder with data\n";
         ParseCmd cli = new ParseCmd.Builder()
                 .help(usage)
-                .parm("-nomonitor","0")
-                .parm("-help", "0")
+                .parm("-nomonitor", "1")
+                .parm("-help", "1")
+                .parm("-archiveall")
                 .parm("-archive", "0").rex("\\d{4}-\\d{2}-\\d{2}")
                 .parm("-workdir", "0").build();
 
@@ -48,7 +50,11 @@ public class Main {
         // long loop = Long.parseLong( R.get("-loop"));
         boolean isNomonitor = R.<String>get("-nomonitor").equals("1");
         boolean isArchive = !R.<String>get("-archive").equals("0");
+        isArchive |= !R.<String>get("-archiveall").equals("0");
         Date datebefore = null;
+
+        System.out.println("isNomonitor:"+isNomonitor);
+        System.out.println("isArchive:"+isArchive);
 
         SimpleDateFormat YMD = new SimpleDateFormat("yyyy-MM-dd");
         if (!R.<String>get("-archive").equals("0")) try {
@@ -151,8 +157,6 @@ public class Main {
             }
         }
 
-
-//перевести на фильтры почтового ящика?
 //        Thread inbox = new Thread(new RPTThread(mappedmailboxes.get("m.zarudnyak@bgoperator.com"), "INBOX", templates, rules));
 //        inbox.start();
 
@@ -210,6 +214,7 @@ public class Main {
                             if (tokenname.equals("subject")) template.report_subject = reader.nextString();
                             if (tokenname.equals("to")) template.report_to = reader.nextString();
                             if (tokenname.equals("mailbox")) template.report_mailbox = reader.nextString();
+                            if (tokenname.equals("send")) template.toSend = reader.nextBoolean();
                             if (tokenname.equals("format")) {
                                 reader.beginArray();
                                 while (reader.hasNext()) {
@@ -283,6 +288,7 @@ public class Main {
                     if (tokenname.equals("subject")) rule.subject = reader.nextString();
                     if (tokenname.equals("from")) rule.from = reader.nextString();
                     if (tokenname.equals("to")) rule.to= reader.nextString();
+                    if (tokenname.equals("age")) rule.age= reader.nextString();
                     if (tokenname.equals("template")) rule.template= reader.nextString();
                     if (tokenname.equals("body")) {
                         reader.beginArray();
@@ -336,6 +342,8 @@ public class Main {
         /** сообщения, который пойдут в отчет */
         List<Map<String, String>> currentRecords = new ArrayList<>();
         List<Section> sections = new ArrayList<>();
+        /** отправлять ли письма в принципе. Отклчюается, если нужно собрать пписьма по каким-то правилам и удалить*/
+        public boolean toSend = true;
 
 
         static class Section {
@@ -387,7 +395,15 @@ public class Main {
                     }
                 }
 
+                //если шаблон не отправляется, то меняем логику. добавляем одну запись и всё
+                if (!this.toSend) {
+                    section.records++;
+                    return true;
+                }
+
                 if (!notEmpty) continue;
+
+                section.records++;
 
                 //вывод секции в отчет
                 for (String line : section.format) {
@@ -398,7 +414,6 @@ public class Main {
 
                     //todo форматировать по sprintf
                     section.report.append(data).append("\n");
-                    section.records++;
                 }
             }
             //todo алерты
@@ -427,8 +442,9 @@ public class Main {
                 report.append(section.report);
 
                 //отправить
-            Mailbox mailbox = mappedmailboxes.get(report_mailbox);
+            if (toSend)
             try {
+                Mailbox mailbox = mappedmailboxes.get(report_mailbox);
                 sendEmail(mailbox, this.report_to, this.report_subject, report, "text/plain; charset=UTF-8");
             } catch (MessagingException e) {
                 e.printStackTrace();
@@ -516,9 +532,11 @@ public class Main {
         String name;
         String mailbox;
         String folder;
-        String subject;
-        String from;
-        String to;
+        String subject = "";
+        String from = "";
+        String to = "";
+        /** возраст сообщения. формат "&lt;3D","&gt;=10H". знак сравнения - величина - единица D/H/M*/
+        String age = "";
         List<String> body = new ArrayList<>();
         List<String> section = new ArrayList<>();
         Map<String,String> flags = new HashMap<>();

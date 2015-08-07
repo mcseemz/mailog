@@ -1,5 +1,7 @@
 package com.mcseemz;
 
+import org.apache.commons.lang3.time.DurationFormatUtils;
+
 import javax.mail.*;
 import javax.mail.search.AndTerm;
 import javax.mail.search.FlagTerm;
@@ -70,7 +72,11 @@ public class Archive implements RunnableFuture{
                     }
                     if (datebefore!=null && message.getSentDate().compareTo(datebefore)>0) continue;    //ограничение по датам
 
-                    processMessage(rule, message);
+                    try {
+                        processMessage(rule, message);
+                    } catch (javax.mail.MessageRemovedException ex) {
+                        System.out.println("message removed already!");
+                    }
                 }
             }
         } catch (Exception e) {
@@ -95,17 +101,50 @@ public class Archive implements RunnableFuture{
         String subject = message.getSubject();
         if (subject.startsWith("RPT:")) {
             System.out.println("report message detected. Skip");
-            return true;
+            return false;
         }
+
+        System.out.println("now rule:"+rule.name);
 
         boolean messageProcessed = false;
 
         try {
             Pattern psubject = Pattern.compile(rule.subject);
             Matcher subjectMatcher = psubject.matcher(subject);
-            if (!subjectMatcher.find()) return true;
+            if (!subjectMatcher.find()) {
+                System.out.println("subject failed:"+subject);
+                return false;
+            }
 
             System.out.println("subject:"+subject);
+
+            //todo проверка на другие поля из шапки
+//            if (!rule.from.isEmpty())
+//            if (!rule.to.isEmpty())
+            if (!rule.age.isEmpty()) {
+                Date sentDate = message.getSentDate();
+                Date now = new Date();
+                int val = Integer.valueOf(rule.age.replaceAll("\\D", ""));
+
+                int tz1 = TimeZone.getDefault().getOffset(sentDate.getTime());
+                int tz2 = TimeZone.getDefault().getOffset(now.getTime());
+                long diff = 0;
+                if (rule.age.endsWith("D")) {
+                    diff = Math.abs(now.getTime() - sentDate.getTime() + (tz2 - tz1)) / 86400 / 1000+1;
+                }
+                if (rule.age.endsWith("H")) {
+                    diff = Math.abs(now.getTime() - sentDate.getTime() + (tz2 - tz1)) / 3600 / 1000+1;
+                }
+
+                if (rule.age.contains(">") && diff>val) ;
+                else if (rule.age.contains(">=") && diff>=val) ;
+                else if (rule.age.contains("<") && diff<val) ;
+                else if (rule.age.contains("<=") && diff<=val) ;
+                else {
+                    System.out.println("age failed:"+rule.age+"/"+diff);
+                    return false;
+                }
+            }
 
             //разбить тело на секции
             //для каждой секции формируется свое множество полей
@@ -242,7 +281,7 @@ section:                for (String section : sections) {
             boolean done = rule.templateObject.processRecords();
             if (done) message.getFolder().expunge();   //сбивает нумерацию
         }
-        return false;
+        return true;
     }
 
     @Override
