@@ -96,10 +96,10 @@ public class Template {
                     for (String line : section.format) {
                         System.out.println(line);
 
-                        Matcher fieldsMatcher = Main.fieldsPattern.matcher(line);
+                        Matcher fieldsMatcher = Main.fieldsFormatPattern.matcher(line);
                         while (fieldsMatcher.find())
                             if (!fieldsMatcher.group(1).contains(Main.KEYWORD_SECTION))
-                                section.usedFields.add(fieldsMatcher.group(1));
+                                section.usedFields.add(fieldsMatcher.group(1)+(fieldsMatcher.group(2)==null ? "" : fieldsMatcher.group(2)));
                     }
                     if (section.usedFields.isEmpty()) {
                         section.oneTime = true; //один раз выводим
@@ -169,6 +169,7 @@ public class Template {
 
             boolean notEmpty = false;
             for (String usedField : section.usedFields) {
+                usedField = usedField.replaceAll("#.?\\d+","");    //отрезаем цифры
                 System.out.println("now usedfield: " + usedField);
                 if (record.containsKey(usedField.toLowerCase()))  notEmpty = true;
                 //если поле обязательное, а его нет
@@ -190,10 +191,16 @@ public class Template {
             for (String line : section.format) {
                 String data = line;
                 if (line.contains(Main.KEYWORD_SECTION)) continue;
-                for (String usedField : section.usedFields)
-                    data = data.replace("<" + usedField + ">", record.containsKey(usedField.toLowerCase()) ? record.get(usedField.toLowerCase()) : "");
+                for (String usedField : section.usedFields) {
+                    String trimusedField = usedField.replaceAll("#.?\\d+", "");    //отрезаем цифры
+                    String format = usedField.replaceAll(".+#(.?\\d+)","$1");
+                    if (format.equals(usedField)) format = "";
+
+                    data = data.replace("<" + usedField + ">", String.format("%1$"+format+"s", record.containsKey(trimusedField.toLowerCase()) ? record.get(trimusedField.toLowerCase()) : ""));
+                }
 
                 //todo форматировать по sprintf
+                //проблема в передаче форматирования в шаблоне
                 section.report.append(data).append("\n");
             }
         }
