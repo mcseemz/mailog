@@ -35,7 +35,7 @@ public class Rule {
     Template templateObject;
 
     static List<Rule> initRules() throws IOException {
-        final List<Rule> templates = new ArrayList<>();
+        final List<Rule> rules = new ArrayList<>();
 
         Files.walkFileTree(Paths.get(Main.workdir + "/rules"), new SimpleFileVisitor<Path>() {
             @Override
@@ -75,6 +75,11 @@ public class Rule {
                         }
                         reader.endArray();
                     }
+                    if (tokenname.equals("templatebody")) {
+                        Template template = Template.parseTemplate(reader);
+                        rule.template = template.name;
+                        rule.templateObject = template;
+                    }
                     if (tokenname.equals("flags")) {
                         reader.beginObject();
                         while (reader.hasNext()) {
@@ -84,12 +89,12 @@ public class Rule {
                     }
                 }
                 reader.endObject();
-                templates.add(rule);
+                rules.add(rule);
                 return FileVisitResult.CONTINUE;
             }
 
         });
-        return templates;
+        return rules;
     }
 
     public boolean processMessage(Message message) throws MessagingException {
@@ -241,12 +246,21 @@ public class Rule {
 
                         Pattern pbody = Pattern.compile(bodyrule);
                         Matcher mbody = pbody.matcher(section);
-                        if (mbody.find())
+                        boolean isFound = false;
+                        while (mbody.find()) {
+                            isFound = true;
                             for (int i = 0; i < mbody.groupCount(); i++) {
-                                record.put(bodyFields.get(i).toLowerCase(), mbody.group(i + 1));
+                                if (flags.get(bodyFields.get(i).toLowerCase()) != null
+                                        && flags.get(bodyFields.get(i).toLowerCase()).contains("g")
+                                        && record.containsKey(bodyFields.get(i).toLowerCase())
+                                        ) {
+                                    //накопление данных в поле
+                                    record.put(bodyFields.get(i).toLowerCase(), record.get(bodyFields.get(i).toLowerCase()) + " | " + mbody.group(i + 1));
+                                } else record.put(bodyFields.get(i).toLowerCase(), mbody.group(i + 1));
                                 record.put(bodyFields.get(i).toLowerCase() + "_flags", "b");
                             }
-                        else System.out.println("rule:not found");
+                        }
+                        if (!isFound) System.out.println("rule:not found");
 
                         bodyrulefields.addAll(bodyFields);
                     }

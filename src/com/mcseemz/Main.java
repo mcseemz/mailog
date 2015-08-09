@@ -27,10 +27,10 @@ public class Main {
                 "   workdir    -   path to another folder with data\n";
         ParseCmd cli = new ParseCmd.Builder()
                 .help(usage)
-                .parm("-nomonitor", "1")
+                .parm("-nomonitor", "0")
                 .parm("-learn", "1")
                 .parm("-help", "1")
-                .parm("-archiveall")
+                .parm("-archiveall","0")
                 .parm("-archive", "0").rex("\\d{4}-\\d{2}-\\d{2}")
                 .parm("-workdir", "0").build();
 
@@ -82,24 +82,24 @@ public class Main {
 
         //сгруппировать правила по ящикам и папкам
         for (Rule rule : rules) {
-            //проверка, что для этого правила есть шаблон
-            Template template = null;
-            System.out.println("check template for rule: "+rule.name);
-            boolean templateFound = false;
-            for (Template testTemplate : templates) {
-                if (testTemplate.name.equals(rule.template)) {
-                    templateFound=true;
-                    rule.templateObject = testTemplate;
-                    break;
+            if (rule.templateObject==null) {    //еще нет шаблона для правила
+                //проверка, что для этого правила есть шаблон
+                System.out.println("check template for rule: " + rule.name);
+                boolean templateFound = false;
+                for (Template testTemplate : templates) {
+                    if (testTemplate.name.equals(rule.template)) {
+                        templateFound = true;
+                        rule.templateObject = testTemplate;
+                        break;
+                    }
                 }
+                if (!templateFound) {
+                    System.out.println("no template found for " + rule.template);
+                    continue;
+                }
+                /*todo если шаблонов несколько, то поменять принцип
+                выкидывать отсутствующие шаблоны из правила. Если вообще не осталось шаблонов, то выкинуть правило*/
             }
-            if (!templateFound) {
-                System.out.println("no template found for "+rule.template);
-                continue;
-            }
-            /*todo если шаблонов несколько, то поменять принцип
-            выкидывать отсутствующие шаблоны из правила. Если вообще не осталось шаблонов, то выкинуть правило*/
-
 
             String key = rule.mailbox+"#"+rule.folder;
             if (!mappedrules.containsKey(key))

@@ -135,7 +135,7 @@ public class Archive implements RunnableFuture{
         props.setProperty("mail.store.protocol", "imap");
 
         imapsession = Session.getDefaultInstance(props, null);
-        imapsession.setDebug(true);
+        imapsession.setDebug(false);
         for (Provider provider : imapsession.getProviders())
             System.out.println("we have provider:"+provider.getProtocol()+" "+provider.getType()+" "+provider.getClassName());
         store = imapsession.getStore("imap");

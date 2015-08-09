@@ -41,85 +41,90 @@ public class Template {
             public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
                 System.out.println("processing template file: " + file.getFileName());
                 InputStreamReader ireader = new InputStreamReader(Files.newInputStream(file));
-                Template template = new Template();
-
                 JsonReader reader = new JsonReader(ireader);
-                reader.beginObject();
-                while (reader.hasNext()) {
-                    String tokenname = reader.nextName();
-                    if (tokenname.equals("name")) template.name = reader.nextString();
-                    if (tokenname.equals("report")) {
-                        reader.beginObject();
-                        while (reader.hasNext()) {
-                            tokenname = reader.nextName();
 
-                            if (tokenname.equals("records")) template.report_records = reader.nextInt();
-                            if (tokenname.equals("subject")) template.report_subject = reader.nextString();
-                            if (tokenname.equals("to")) template.report_to = reader.nextString();
-                            if (tokenname.equals("mailbox")) template.report_mailbox = reader.nextString();
-                            if (tokenname.equals("send")) template.toSend = reader.nextBoolean();
-                            if (tokenname.equals("format")) {
-                                reader.beginArray();
-                                while (reader.hasNext()) {
-                                    template.report_format.add(reader.nextString());
-                                }
-                                reader.endArray();
-                            }
-                        }
-                        reader.endObject();
-                    }
-                }
-                reader.endObject();
+                Template template = parseTemplate(reader);
                 templates.add(template);
-
-                //побить по секциям
-                int startSection = 0;
-                int endSection = 0;
-                while (endSection < template.report_format.size()) {
-                    if (template.report_format.get(endSection).contains(Main.KEYWORD_SECTION)) {
-                        Section section = new Section();
-                        section.format.addAll(template.report_format.subList(startSection, endSection + 1));
-                        template.sections.add(section);
-                        startSection = endSection + 1;
-                        endSection = startSection;
-                    }
-                    endSection++;
-                }
-                Section section1 = new Section();
-                section1.format.addAll(template.report_format.subList(startSection, endSection));
-                template.sections.add(section1);
-
-                System.out.println("template:sections");
-                for (Section section : template.sections) {
-                    System.out.println("template:section format");
-
-                    for (String line : section.format) {
-                        System.out.println(line);
-
-                        Matcher fieldsMatcher = Main.fieldsFormatPattern.matcher(line);
-                        while (fieldsMatcher.find())
-                            if (!fieldsMatcher.group(1).contains(Main.KEYWORD_SECTION))
-                                section.usedFields.add(fieldsMatcher.group(1)+(fieldsMatcher.group(2)==null ? "" : fieldsMatcher.group(2)));
-                    }
-                    if (section.usedFields.isEmpty()) {
-                        section.oneTime = true; //один раз выводим
-                    }
-
-                    System.out.println("template:section onetime:" + section.oneTime);
-                    System.out.println("template:usedfields:" + section.usedFields);
-
-                    section.usedFields.add(Main.KEYWORD_DATE);
-                    section.usedFields.add(Main.KEYWORD_TIME);
-                    section.usedFields.add(Main.KEYWORD_FOLDER);
-                    section.usedFields.add(Main.KEYWORD_FROM);
-                }
-
 
                 return FileVisitResult.CONTINUE;
             }
 
         });
         return templates;
+    }
+
+    static Template parseTemplate(JsonReader reader) throws IOException {
+        Template template = new Template();
+        reader.beginObject();
+        while (reader.hasNext()) {
+            String tokenname = reader.nextName();
+            if (tokenname.equals("name")) template.name = reader.nextString();
+            if (tokenname.equals("report")) {
+                reader.beginObject();
+                while (reader.hasNext()) {
+                    tokenname = reader.nextName();
+
+                    if (tokenname.equals("records")) template.report_records = reader.nextInt();
+                    if (tokenname.equals("subject")) template.report_subject = reader.nextString();
+                    if (tokenname.equals("to")) template.report_to = reader.nextString();
+                    if (tokenname.equals("mailbox")) template.report_mailbox = reader.nextString();
+                    if (tokenname.equals("send")) template.toSend = reader.nextBoolean();
+                    if (tokenname.equals("format")) {
+                        reader.beginArray();
+                        while (reader.hasNext()) {
+                            template.report_format.add(reader.nextString());
+                        }
+                        reader.endArray();
+                    }
+                }
+                reader.endObject();
+            }
+        }
+        reader.endObject();
+
+        //побить по секциям
+        int startSection = 0;
+        int endSection = 0;
+        while (endSection < template.report_format.size()) {
+            if (template.report_format.get(endSection).contains(Main.KEYWORD_SECTION)) {
+                Section section = new Section();
+                section.format.addAll(template.report_format.subList(startSection, endSection + 1));
+                template.sections.add(section);
+                startSection = endSection + 1;
+                endSection = startSection;
+            }
+            endSection++;
+        }
+        Section section1 = new Section();
+        section1.format.addAll(template.report_format.subList(startSection, endSection));
+        template.sections.add(section1);
+
+        System.out.println("template:sections");
+        for (Section section : template.sections) {
+            System.out.println("template:section format");
+
+            for (String line : section.format) {
+                System.out.println(line);
+
+                Matcher fieldsMatcher = Main.fieldsFormatPattern.matcher(line);
+                while (fieldsMatcher.find())
+                    if (!fieldsMatcher.group(1).contains(Main.KEYWORD_SECTION))
+                        section.usedFields.add(fieldsMatcher.group(1)+(fieldsMatcher.group(2)==null ? "" : fieldsMatcher.group(2)));
+            }
+            if (section.usedFields.isEmpty()) {
+                section.oneTime = true; //один раз выводим
+            }
+
+            System.out.println("template:section onetime:" + section.oneTime);
+            System.out.println("template:usedfields:" + section.usedFields);
+
+            section.usedFields.add(Main.KEYWORD_DATE);
+            section.usedFields.add(Main.KEYWORD_TIME);
+            section.usedFields.add(Main.KEYWORD_FOLDER);
+            section.usedFields.add(Main.KEYWORD_FROM);
+        }
+
+        return template;
     }
 
 
@@ -250,6 +255,7 @@ public class Template {
         for (Message currentMessage : currentMessages) {
             try {
                 currentMessage.setFlag(Flags.Flag.DELETED, true);
+//                currentMessage.setFlag(Flags.Flag.SEEN, false);
             } catch (MessagingException e) {
                 e.printStackTrace();
             }
