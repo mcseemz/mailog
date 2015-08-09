@@ -1,19 +1,12 @@
 package com.mcseemz;
 
-import org.apache.commons.lang3.time.DurationFormatUtils;
-
 import javax.mail.*;
-import javax.mail.search.AndTerm;
 import javax.mail.search.FlagTerm;
-import javax.mail.search.SearchTerm;
-import javax.mail.search.SubjectTerm;
-import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.RunnableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
@@ -24,21 +17,23 @@ public class Archive implements RunnableFuture{
 
     private Main.Mailbox mailbox;
     private String folder;
-    private List<Main.Template> templates;
-    private List<Main.Rule> rules;
+    private List<Template> templates;
+    private List<Rule> rules;
     private String threadName = "default";
     private boolean shouldCancel = false;
     private boolean isCancelled = false;
     private Date datebefore = null;
+    private boolean learnmode;
     Session imapsession = null;
     Store store = null;
 
-    public Archive(Main.Mailbox mailbox, String folder, List<Main.Template> templates, List<Main.Rule> rules, Date datebefore) {
+    public Archive(Main.Mailbox mailbox, String folder, List<Rule> rules, Date datebefore, boolean learnmode) {
         this.mailbox = mailbox;
         this.folder = folder;
         this.templates = templates;
         this.rules = rules;
         this.datebefore = datebefore;
+        this.learnmode = learnmode;
     }
 
     @Override
@@ -64,7 +59,8 @@ public class Archive implements RunnableFuture{
             System.out.println("for folder " + folder + " found total messages:" + messages.length);
 
             for (Message message : messages) {
-                for (Main.Rule rule : rules) {
+                boolean isprocessed = false;
+                for (Rule rule : rules) {
                     if (shouldCancel) {
                         isCancelled = true;
                         System.out.println("should cancel detected");
@@ -73,10 +69,19 @@ public class Archive implements RunnableFuture{
                     if (datebefore!=null && message.getSentDate().compareTo(datebefore)>0) continue;    //ограничение по датам
 
                     try {
-                        processMessage(rule, message);
+                        isprocessed |= rule.processMessage(message);
                     } catch (javax.mail.MessageRemovedException ex) {
                         System.out.println("message removed already!");
                     }
+                }
+
+                //если режим обучения
+                if (!isprocessed && learnmode) {
+                    // простой алгоритм
+                    // выкинуть из строки цифры.
+                    // если строка пустая или короткая, то дальше
+                    // тема и отправитель будут ключом.
+                    // если количество совпавших больше одного, то создать шаблон
                 }
             }
         } catch (Exception e) {
@@ -97,192 +102,6 @@ public class Archive implements RunnableFuture{
         }
     }
 
-    public static boolean processMessage(Main.Rule rule, Message message) throws MessagingException {
-        String subject = message.getSubject();
-        if (subject.startsWith("RPT:")) {
-            System.out.println("report message detected. Skip");
-            return false;
-        }
-
-        System.out.println("now rule:"+rule.name);
-
-        boolean messageProcessed = false;
-
-        try {
-            Pattern psubject = Pattern.compile(rule.subject);
-            Matcher subjectMatcher = psubject.matcher(subject);
-            if (!subjectMatcher.find()) {
-                System.out.println("subject failed:"+subject);
-                return false;
-            }
-
-            System.out.println("subject:"+subject);
-
-            //todo проверка на другие поля из шапки
-//            if (!rule.from.isEmpty())
-//            if (!rule.to.isEmpty())
-            if (!rule.age.isEmpty()) {
-                Date sentDate = message.getSentDate();
-                Date now = new Date();
-                int val = Integer.valueOf(rule.age.replaceAll("\\D", ""));
-
-                int tz1 = TimeZone.getDefault().getOffset(sentDate.getTime());
-                int tz2 = TimeZone.getDefault().getOffset(now.getTime());
-                long diff = 0;
-                if (rule.age.endsWith("D")) {
-                    diff = Math.abs(now.getTime() - sentDate.getTime() + (tz2 - tz1)) / 86400 / 1000+1;
-                }
-                if (rule.age.endsWith("H")) {
-                    diff = Math.abs(now.getTime() - sentDate.getTime() + (tz2 - tz1)) / 3600 / 1000+1;
-                }
-
-                if (rule.age.contains(">") && diff>val) ;
-                else if (rule.age.contains(">=") && diff>=val) ;
-                else if (rule.age.contains("<") && diff<val) ;
-                else if (rule.age.contains("<=") && diff<=val) ;
-                else {
-                    System.out.println("age failed:"+rule.age+"/"+diff);
-                    return false;
-                }
-            }
-
-            //разбить тело на секции
-            //для каждой секции формируется свое множество полей
-            //в это множество попадает и разобранный subject, и метаполя
-            //проверка на флаги для полей
-
-            String contentType = message.getContentType();
-            StringBuilder text = new StringBuilder();
-
-            System.out.println("contentType:"+contentType);
-
-
-            if (contentType.contains("multipart")) {
-                Multipart multipart = (Multipart) message.getContent();
-                for (int j = 0; j < multipart.getCount(); j++) {
-                    BodyPart bodyPart = multipart.getBodyPart(j);
-                    String bodyPartContentType = bodyPart.getContentType();
-
-                    System.out.println("bodyPartContentType:"+contentType);
-
-                    if (bodyPartContentType.contains("text/plain")) {
-                        text.append(bodyPart.getContent());
-                    }
-                    else if (bodyPartContentType.contains("text/html")) {
-                        text.append(bodyPart.getContent());
-                    }
-                    else if (bodyPartContentType.contains("multipart")) {
-                        multipart = (Multipart) bodyPart.getContent();
-
-                        for (int k = 0; k < multipart.getCount(); k++) {
-                            bodyPart = multipart.getBodyPart(k);
-                            bodyPartContentType = bodyPart.getContentType();
-
-                            System.out.println("bodyPartContentType:"+contentType);
-
-                            if (bodyPartContentType.contains("text/plain")) {
-                                text.append(bodyPart.getContent());
-                            }
-                            else if (bodyPartContentType.contains("text/html")) {
-                                text.append(bodyPart.getContent());
-                            }
-                        }
-                    }
-
-                }
-            } else if (contentType.contains("text/plain")) {
-                text.append(message.getContent());
-            } else if (contentType.contains("text/html")) {
-                text.append(message.getContent());
-            }
-
-            //собрать поля из темы в список
-            Matcher fieldMatcher = fieldsPattern.matcher(rule.subject);
-            List<String> subjectFields = new ArrayList<>();
-            while (fieldMatcher.find()) subjectFields.add(fieldMatcher.group(1));
-
-            System.out.println("subjectFields found:"+subjectFields);
-
-            //разбиваем по секциям
-            //todo бить по всем опмсателям секций, а не только по первому
-            String[] sections = rule.section.isEmpty()
-                    ? new String[]{text.toString()}
-                    : text.toString().split(rule.section.get(0));
-
-            System.out.println("sections size:"+sections.length);
-
-section:                for (String section : sections) {
-                System.out.println("section:"+ section);
-
-                fieldMatcher.reset();
-                Map<String, String> record = new HashMap<>();
-
-                //кладем поля и темы в запись
-                subjectMatcher.reset();
-                subjectMatcher.find();
-                for (int i = 0; i < subjectMatcher.groupCount(); i++) {
-                    record.put(subjectFields.get(i), subjectMatcher.group(i + 1));
-                    record.put(subjectFields.get(i)+"_flags", "s"); //из subject
-                }
-
-                //теперь поля из тела
-                for (String bodyrule : rule.body) {
-                    Matcher bodyMatcher = fieldsPattern.matcher(bodyrule);
-                    List<String> bodyFields = new ArrayList<>();
-                    while (bodyMatcher.find()) bodyFields.add(bodyMatcher.group(1));
-
-                    System.out.println("bodyFields found:"+bodyFields);
-
-                    Pattern pbody = Pattern.compile(bodyrule);
-                    Matcher mbody = pbody.matcher(section);
-                    if (mbody.find())
-                        for (int i = 0; i < mbody.groupCount(); i++) {
-                            record.put(bodyFields.get(i).toLowerCase(), mbody.group(i + 1));
-                            record.put(bodyFields.get(i).toLowerCase()+"_flags", "b");
-                        }
-                    else System.out.println("not found");
-
-                    //проверка
-                    for (String bodyField : bodyFields) {
-                        if (bodyField.toUpperCase().equals(bodyField)
-                                && !record.containsKey(bodyField.toLowerCase())
-                                ) {
-                            System.out.println("required field "+bodyField+" not filled");
-                            continue section; //обязательное поле не заполнено
-                        }
-                    }
-                }
-
-                System.out.println("record done:");
-                for (Map.Entry<String, String> entry : record.entrySet()) {
-                    System.out.println(entry.getKey()+"="+entry.getValue());
-                }
-
-                //record заполнено
-                //проверяем на флаги полей
-//                            for (Map.Entry<String, String> entryFlag : rule.flags.entrySet()) {
-//                                boolean isRequired = entryFlag.getValue().contains("r");
-//                                if ((!record.containsKey(entryFlag.getKey())
-//                                        || record.get(entryFlag.getKey()).isEmpty())
-//                                        && isRequired) continue section;    //плохо собрали
-//                            }
-
-
-                rule.templateObject.addRecord(record, message);
-                messageProcessed = true;
-                System.out.println("rule: record added");
-            }
-
-        } catch (Exception ex) {
-            ex.printStackTrace(System.out);
-        }
-
-        if (messageProcessed) {
-            boolean done = rule.templateObject.processRecords();
-            if (done) message.getFolder().expunge();   //сбивает нумерацию
-        }
-        return true;
-    }
 
     @Override
     public boolean cancel(boolean mayInterruptIfRunning) {

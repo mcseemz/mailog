@@ -16,9 +16,9 @@ import java.util.List;
 public class IdleAdapter extends MessageCountAdapter {
     private IdleManager idleManager;
     private final Session imapsession;
-    private List<Main.Rule> rules;
+    private List<Rule> rules;
 
-    public IdleAdapter(IdleManager idleManager, Session imapsession, List<Main.Rule> rules) {
+    public IdleAdapter(IdleManager idleManager, Session imapsession, List<Rule> rules) {
 
         this.idleManager = idleManager;
         this.imapsession = imapsession;
@@ -32,10 +32,10 @@ public class IdleAdapter extends MessageCountAdapter {
                 " got " + msgs.length + " new messages");
 
         for (Message message : msgs) {
-            for (Main.Rule rule : rules) {
+            for (Rule rule : rules) {
                 try {
                     synchronized (imapsession) {
-                        Archive.processMessage(rule, message);
+                        rule.processMessage(message);
                     }
                 } catch (MessagingException e) {
                     e.printStackTrace();
