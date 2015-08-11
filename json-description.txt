@@ -1,0 +1,107 @@
+rule file
+{
+//rule
+	"name":"test1",
+//name of mailbox to monitor
+	"mailbox":"asd@asd.com",
+//folder in mailbox
+	"folder":"Different3",
+//regexp for subject matching
+//named groups notation. fileds in brackets passed to template.
+//lower case required
+	"subject":"ticket test (?<ticketno>\\d+), (?<tourno>\\d+) / (?<date>[\\w\\.]+)",
+//regexp for sender. empty for all
+	"from":"robot@asd.com",
+//regexp for receiver. empty for all
+	"to":"asd.*",
+//section describin email content to match
+	"body":[
+//each line used to locate fields. named groups notation. UPPER CASE means this field is required in this email section to process with template
+		"MS\\[1\\]=(?<PNRNO>\\w{5})",
+		"MS\\[5\\]=(?<TICKETNO>\\d+)"
+	],
+//there can be several body fieldsets, each with its own required fields, so we can distinguish them filling template.
+	"body":[
+		"-(?<COUNTRY>.*?) (?<fdate>\\d{2}\\.\\d{2}\\.\\d{4}) tourist (?<name>.*?) already booked"
+	],
+	"body":[
+		"-(?<COUNTRY>.*?) (?<fdate>\\d{2}\\.\\d{2}\\.\\d{4})\\s+no booking for (?<name>.*?)"
+	],
+//regexp for splitting email body by sections. each section processed independently
+	"bodysplitter": [
+		"SPLIT        : SECTION|TTS::|TTS2::"
+	],
+//flags for detected fields
+	"flags": {
+//name of field in lowercase
+//flag "g" means if several matches found they are summed in one filed with "|" divider
+//flags are accumulates in one string
+		"ticketno":"g"
+	},
+
+//name of template to fill for report
+	"template":"template1"
+//template can be either located in separate file in templates folder, or included in rule in "templatebody" tag.
+}
+
+
+//template file
+{
+//template name
+	"name":"template1",
+//reporting details
+	"report":{
+//number of records to accumulate before sending email
+		"records":10,
+//to whom
+		"to":"asd@asd.com",
+//what mailbox to use
+		"mailbox":"asd@asd.com",
+//report format
+		"format":[
+//report sections divided with <#section> string
+//section with no fields will appear only once in report
+			"date       time    booking     ticket         from                              folder",
+			"<#section>",
+//<#mdate> - email date
+//<#mtime> - email time
+//<event#-7> - field having #... suffix will be sprintf formatted. only width/positioning supported
+//<#mfrom> - from
+//<#mfolder> - rule folder
+//filed name in UPPER CASE means this field is required to be filled to be printed in this section
+//required fields is the way to split different fieldsets to different report sections
+			"<#mdate> <#mtime> <tourno>	<event#-7> <PNRNO#5> <TICKETNO#13> <#mfrom#-50> <#mfolder>",
+//we can have multiple sections, each with its own required fields
+			"<#section>",
+			"date       time     booking     country                        name",
+			"<#section>",
+			"<#mdate> <#mtime> <tourno>	<event#7> <fdate#10> <COUNTRY#-25> <name>",
+		],
+//report email subject
+//RPT: prefix will be autimatically added to each subject
+		"subject":"UNI выписка",
+//send flag. if false - no email will be send. Useful for dummy templates just to drop matched emails
+		"send":true
+	}
+}
+
+
+//mailbox.json
+//contains mailboxes data
+[
+{
+//name of mailbox
+	"mailbox":"asd@asd.com",
+//password. can be prefilled. if not filled, will be requested upon startup
+	"password":"",
+	"imap_address":"mx.bgoperator.com",
+	"imap_port":143,
+	"smtp_address":"mx.bgoperator.com",
+	"smtp_port":25,
+//smtp authentication
+	"smtp_auth":true,
+//TLS session
+	"starttls":true
+}
+//all mailboxes here
+]

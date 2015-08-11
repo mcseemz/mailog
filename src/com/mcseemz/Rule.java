@@ -115,11 +115,19 @@ public class Rule {
                 System.out.println("subject failed:" + subject);
                 return false;
             }
-
             System.out.println("subject:" + subject);
 
+            if (!this.from.isEmpty()) {
+                Pattern pfrom = Pattern.compile(this.from);
+                Matcher fromMatcher = pfrom.matcher(message.getFrom()[0].toString());
+                if (!fromMatcher.find()) {
+                    System.out.println("from failed:" + message.getFrom()[0].toString());
+                    return false;
+                }
+                System.out.println("from:" + message.getFrom()[0].toString());
+            }
+
             //todo проверка на другие поля из шапки
-//            if (!this.from.isEmpty())
 //            if (!this.to.isEmpty())
             if (!this.age.isEmpty()) {
                 Date sentDate = message.getSentDate();

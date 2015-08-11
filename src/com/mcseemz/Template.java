@@ -301,4 +301,9 @@ public class Template {
         return true;
     }
 
+    //todo template.doNotDelete
+    //todo в режиме archive не учитывать age
+    //todo алерты
+    //todo релоад шаблонов без рестарта
+
 }
