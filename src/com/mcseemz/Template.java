@@ -32,6 +32,7 @@ public class Template {
      * отправлять ли письма в принципе. Отклчюается, если нужно собрать пписьма по каким-то правилам и удалить
      */
     public boolean toSend = true;
+    public boolean toDelete = true;
 
     static List<Template> initTemplates() throws IOException {
         final List<Template> templates = new ArrayList<>();
@@ -69,6 +70,7 @@ public class Template {
                     if (tokenname.equals("to")) template.report_to = reader.nextString();
                     if (tokenname.equals("mailbox")) template.report_mailbox = reader.nextString();
                     if (tokenname.equals("send")) template.toSend = reader.nextBoolean();
+                    if (tokenname.equals("delete")) template.toDelete = reader.nextBoolean();
                     if (tokenname.equals("format")) {
                         reader.beginArray();
                         while (reader.hasNext()) {
@@ -204,30 +206,32 @@ public class Template {
                     data = data.replace("<" + usedField + ">", String.format("%1$"+format+"s", record.containsKey(trimusedField.toLowerCase()) ? record.get(trimusedField.toLowerCase()) : ""));
                 }
 
-                //todo форматировать по sprintf
-                //проблема в передаче форматирования в шаблоне
                 section.report.append(data).append("\n");
             }
         }
-        //todo алерты
-        //алерты возможны, если он постоянно мониторит активность
-        //подверить store.addFolderListener(); на папку
-        //как совмещать долгий прогон и listener с алертами? Раздельные механизмы
-        //можно listenermode - тогда скармливать правилам не все, а пойманные в listener данные
         return true;
+    }
+
+    public boolean processRecords() {
+        return processRecords(false);
+    }
+
+    public boolean flush() {
+        return processRecords(true);
     }
 
     /**
      * обработать накопленные записи.
      * запускается отдельно, чтобы срабатывать после окончания обработки письма, и не разбивать письмо на два отчета
      */
-    public boolean processRecords() {
+    private boolean processRecords(boolean doFlush) {
         //проверить на выполнение условий
         //сколько записей в секциях
         int totalrecords = 0;
         for (Section section : sections) totalrecords += section.records;
 
-        if (totalrecords < this.report_records) return false; //не выполнено условие по размеру
+        if (totalrecords==0) return false;  //точно ничего не отправляем
+        if (totalrecords < this.report_records && !doFlush) return false; //не выполнено условие по размеру
 
         //собрать отчет
         StringBuilder report = new StringBuilder();
@@ -254,6 +258,7 @@ public class Template {
         System.out.println("currentMessages to delete: " + currentMessages.size());
         for (Message currentMessage : currentMessages) {
             try {
+                if (toDelete)
                 currentMessage.setFlag(Flags.Flag.DELETED, true);
 //                currentMessage.setFlag(Flags.Flag.SEEN, false);
             } catch (MessagingException e) {
@@ -301,8 +306,7 @@ public class Template {
         return true;
     }
 
-    //todo template.doNotDelete
-    //todo в режиме archive не учитывать age
+    //todo в режиме monitor не учитывать age
     //todo алерты
     //todo релоад шаблонов без рестарта
 

@@ -84,6 +84,11 @@ public class Archive implements RunnableFuture{
                     // если количество совпавших больше одного, то создать шаблон
                 }
             }
+
+            if (!Main.isNoflush)    //if we flush
+            for (Rule rule : rules) {
+                rule.templateObject.flush();    //send letters
+            }
         } catch (Exception e) {
             e.printStackTrace(System.out);
 

@@ -18,7 +18,7 @@ public class Main {
 
     public static void main(String[] args) throws IOException, MessagingException {
         //https://code.google.com/p/parse-cmd/
-        String usage = "usage: [-help] [-nomonitor] [-archive YYYY-MM-DD] [-archiveall] [-workdir path_to_data]\n" +
+        String usage = "usage: [-help] [-nomonitor] [-archive YYYY-MM-DD] [-archiveall] [-flush] [-workdir path_to_data]\n" +
                 "options:\n" +
                 "   archive    -   processes all messages before selected date, inclusive.\n" +
                 "   archiveall    -   processes all messages before selected date, inclusive.\n" +
@@ -27,10 +27,11 @@ public class Main {
                 "   workdir    -   path to another folder with data\n";
         ParseCmd cli = new ParseCmd.Builder()
                 .help(usage)
-                .parm("-nomonitor", "0")
+                .parm("-nomonitor", "0", "1")
                 .parm("-learn", "1")
-                .parm("-help", "1")
-                .parm("-archiveall","0")
+                .parm("-help", "0","1")
+                .parm("-archiveall","0","1")
+                .parm("-noflush","0","1")
                 .parm("-archive", "0").rex("\\d{4}-\\d{2}-\\d{2}")
                 .parm("-workdir", "0").build();
 
@@ -45,7 +46,8 @@ public class Main {
         // R contains default or input values for defined parms and used as in:
         // long loop = Long.parseLong( R.get("-loop"));
         boolean isNomonitor = R.<String>get("-nomonitor").equals("1");
-        boolean isArchive = !R.<String>get("-archive").equals("0");
+        isNoflush = R.<String>get("-noflush").equals("1");
+        isArchive = !R.<String>get("-archive").equals("0");
         boolean isLearn = !R.<String>get("-learn").equals("0");
         isArchive |= !R.<String>get("-archiveall").equals("0");
         Date datebefore = null;
@@ -223,6 +225,10 @@ public class Main {
     private static final Map<String, IdleManager> mappedIdleManagers = new HashMap<>();
     private static final Map<String, Session> mappedIdleSessions = new HashMap<>();
     private static List<Future> archiveList = new ArrayList<>();
+    /** archive mode turned on */
+    public static boolean isArchive = false;
+    /** do not send uncomplete report after archiving */
+    public static boolean isNoflush = false;
 
     final static String KEYWORD_SECTION = "#section";
     final static String KEYWORD_DATE = "#mdate";
