@@ -14,6 +14,9 @@ rule file
 	"from":"robot@asd.com",
 //regexp for receiver. empty for all
 	"to":"asd.*",
+//age filter. Condition: <,<=,>,>=; value qualifier: Day/Hour. last 24H = 0D
+//note - also works in monitor mode, so messages with >= condition will be skipped.
+	"age":">=3D"
 //section describin email content to match
 	"body":[
 //each line used to locate fields. named groups notation. UPPER CASE means this field is required in this email section to process with template
@@ -80,8 +83,12 @@ rule file
 //report email subject
 //RPT: prefix will be autimatically added to each subject
 		"subject":"UNI выписка",
-//send flag. if false - no email will be send. Useful for dummy templates just to drop matched emails
+//send flag. optional. if false - no email will be send. Useful for dummy templates just to drop matched emails
 		"send":true
+//delete source emails after report sent. optional. default true
+		"delete":true
+//mark source emails unseen if not delete. optional. default false
+		"seen":true
 	}
 }
 

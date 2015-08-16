@@ -14,6 +14,7 @@ import java.util.*;
 import java.util.regex.Matcher;
 
 /**
+ * Template instanse and initializations
  * Created by mcseem on 08.08.15.
  */
 public class Template {
@@ -28,11 +29,14 @@ public class Template {
      */
     List<Map<String, String>> currentRecords = new ArrayList<>();
     List<Section> sections = new ArrayList<>();
+    /**alerts list for this template*/
+    List<Alert> alerts = new ArrayList<>();
     /**
      * отправлять ли письма в принципе. Отклчюается, если нужно собрать пписьма по каким-то правилам и удалить
      */
     public boolean toSend = true;
     public boolean toDelete = true;
+    public boolean toUnseen = false;
 
     static List<Template> initTemplates() throws IOException {
         final List<Template> templates = new ArrayList<>();
@@ -71,6 +75,7 @@ public class Template {
                     if (tokenname.equals("mailbox")) template.report_mailbox = reader.nextString();
                     if (tokenname.equals("send")) template.toSend = reader.nextBoolean();
                     if (tokenname.equals("delete")) template.toDelete = reader.nextBoolean();
+                    if (tokenname.equals("seen")) template.toUnseen = !reader.nextBoolean();
                     if (tokenname.equals("format")) {
                         reader.beginArray();
                         while (reader.hasNext()) {
@@ -81,6 +86,7 @@ public class Template {
                 }
                 reader.endObject();
             }
+            if (tokenname.equals("alert")) template.alerts.add(Alert.initAlert(reader));
         }
         reader.endObject();
 
@@ -152,27 +158,30 @@ public class Template {
             System.out.println(entry.getKey() + "=" + entry.getValue());
         }
 
-        SimpleDateFormat date = new SimpleDateFormat("dd.MM.yyyy");
-        SimpleDateFormat time = new SimpleDateFormat("HH.mm.ss");
-
         //добавить запись
         currentRecords.add(record);
         currentMessages.add(message);
         System.out.println("template: record added. Now:" + currentRecords.size() + " / " + currentMessages.size());
 
+        try {
+            record.put(Main.KEYWORD_DATE, date.format(message.getSentDate()));
+            record.put(Main.KEYWORD_TIME, time.format(message.getSentDate()));
+            record.put(Main.KEYWORD_FROM, message.getFrom().length > 0 ? message.getFrom()[0].toString() : "");
+            record.put(Main.KEYWORD_FOLDER, message.getFolder().getFullName());
+        } catch (MessagingException e) {
+            e.printStackTrace();
+        }
+
+        if (!Main.isArchive)
+        for (Alert alert : alerts) {
+            alert.addRecord(record);
+        }
+
+
         for (Section section : sections) {
             System.out.println("template: section start "+section.format.size()+" "+section.oneTime+" "+section.records);
             if (section.format.isEmpty()) section.records++;    //просто считаем письма
             if (section.oneTime && section.records > 0) continue;   //если вообще нет полей
-
-            try {
-                record.put(Main.KEYWORD_DATE, date.format(message.getSentDate()));
-                record.put(Main.KEYWORD_TIME, time.format(message.getSentDate()));
-                record.put(Main.KEYWORD_FROM, message.getFrom().length > 0 ? message.getFrom()[0].toString() : "");
-                record.put(Main.KEYWORD_FOLDER, message.getFolder().getFullName());
-            } catch (MessagingException e) {
-                e.printStackTrace();
-            }
 
             boolean notEmpty = false;
             for (String usedField : section.usedFields) {
@@ -242,7 +251,7 @@ public class Template {
         if (toSend)
             try {
                 Main.Mailbox mailbox = Main.mappedmailboxes.get(report_mailbox);
-                sendEmail(mailbox, this.report_to, this.report_subject, report, "text/plain; charset=UTF-8");
+                sendEmail(mailbox, this.report_to, "RPT: "+this.report_subject, report, "text/plain; charset=UTF-8");
             } catch (MessagingException e) {
                 e.printStackTrace();
             }
@@ -260,7 +269,8 @@ public class Template {
             try {
                 if (toDelete)
                 currentMessage.setFlag(Flags.Flag.DELETED, true);
-//                currentMessage.setFlag(Flags.Flag.SEEN, false);
+                else if (toUnseen)
+                currentMessage.setFlag(Flags.Flag.SEEN, false);
             } catch (MessagingException e) {
                 e.printStackTrace();
             }
@@ -269,7 +279,7 @@ public class Template {
         return true;
     }
 
-    private synchronized boolean sendEmail(final Main.Mailbox mailbox, String to, String subject, StringBuilder report, String contenttype) throws MessagingException {
+    public static synchronized boolean sendEmail(final Main.Mailbox mailbox, String to, String subject, StringBuilder report, String contenttype) throws MessagingException {
         Properties props = System.getProperties();
         props.setProperty("mail.transport.protocol", "smtp");
 
@@ -283,17 +293,20 @@ public class Template {
         if (mailbox.starttls)
             props.setProperty("mail.smtp.ssl.trust", "*");
 
-        Session mailSession = Session.getInstance(props,
+        Session mailSession = mailbox.smtp_auth
+                ? Session.getInstance(props,
                 new javax.mail.Authenticator() {
                     protected PasswordAuthentication getPasswordAuthentication() {
                         return new PasswordAuthentication(mailbox.mailbox, mailbox.password);
                     }
-                });
+                })
+                : Session.getInstance(props)
+                ;
         mailSession.setDebug(true);
         Transport transport = mailSession.getTransport();
 
         MimeMessage message = new MimeMessage(mailSession);
-        message.setSubject("RPT: " + subject, "UTF-8");
+        message.setSubject(subject, "UTF-8");
         message.setContent(report.toString(), contenttype);
         message.addRecipient(Message.RecipientType.TO,
                 new InternetAddress(to));
@@ -306,8 +319,17 @@ public class Template {
         return true;
     }
 
-    //todo в режиме monitor не учитывать age
-    //todo алерты
-    //todo релоад шаблонов без рестарта
+    private static SimpleDateFormat date = new SimpleDateFormat("dd.MM.yyyy");
+    private static SimpleDateFormat time = new SimpleDateFormat("HH.mm.ss");
 
+    //todo релоад шаблонов без рестарта
+    /*
+    алерт имеет имя
+    правило, шаблон и алерт имеют поле version
+    при совпадении имени и версии пропускаем
+    при совпадении имени и изменении версии
+        находим по имени
+        перегружаем поля, кроме накопленных
+    при обнаружении нового догружаем в список
+     */
 }

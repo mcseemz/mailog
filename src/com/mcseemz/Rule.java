@@ -15,6 +15,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
+ * Rule instanse and initialization
  * Created by mcseem on 08.08.15.
  */
 public class Rule {
@@ -103,6 +104,10 @@ public class Rule {
             System.out.println("report message detected. Skip");
             return false;
         }
+        if (subject.startsWith("ALERT:")) {
+            System.out.println("alert message detected. Skip");
+            return false;
+        }
 
         System.out.println("now rule:" + this.name);
 
@@ -137,10 +142,10 @@ public class Rule {
                 int tz1 = TimeZone.getDefault().getOffset(sentDate.getTime());
                 int tz2 = TimeZone.getDefault().getOffset(now.getTime());
                 long diff = 0;
-                if (this.age.endsWith("D")) {
+                if (this.age.toUpperCase().endsWith("D")) {
                     diff = Math.abs(now.getTime() - sentDate.getTime() + (tz2 - tz1)) / 86400 / 1000 + 1;
                 }
-                if (this.age.endsWith("H")) {
+                if (this.age.toUpperCase().endsWith("H")) {
                     diff = Math.abs(now.getTime() - sentDate.getTime() + (tz2 - tz1)) / 3600 / 1000 + 1;
                 }
 
@@ -223,7 +228,7 @@ public class Rule {
             Map<String, String> subjectrecord = new HashMap<>();
             //кладем поля и темы в запись
             subjectMatcher.reset();
-            subjectMatcher.find();
+            if (subjectMatcher.find())
             for (int i = 0; i < subjectMatcher.groupCount(); i++) {
                 subjectrecord.put(subjectFields.get(i), subjectMatcher.group(i + 1));
                 subjectrecord.put(subjectFields.get(i) + "_flags", "s"); //из subject

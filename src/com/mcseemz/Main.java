@@ -135,7 +135,7 @@ public class Main {
         //инициализация обработчиков idle
         if (!isNomonitor)
         for (Map.Entry<String, List<Rule>> entry : mappedrules.entrySet()) {
-            Folder folder = null;
+            Folder folder;
             try {
                 Session session = mappedIdleSessions.get(entry.getValue().get(0).mailbox);
                 Store store = session.getStore("imap");

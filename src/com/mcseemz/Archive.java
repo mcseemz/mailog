@@ -7,7 +7,6 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.RunnableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import java.util.regex.Pattern;
 
 /**
  * Created by mcseem on 24.07.15.
@@ -17,9 +16,7 @@ public class Archive implements RunnableFuture{
 
     private Main.Mailbox mailbox;
     private String folder;
-    private List<Template> templates;
     private List<Rule> rules;
-    private String threadName = "default";
     private boolean shouldCancel = false;
     private boolean isCancelled = false;
     private Date datebefore = null;
@@ -30,7 +27,6 @@ public class Archive implements RunnableFuture{
     public Archive(Main.Mailbox mailbox, String folder, List<Rule> rules, Date datebefore, boolean learnmode) {
         this.mailbox = mailbox;
         this.folder = folder;
-        this.templates = templates;
         this.rules = rules;
         this.datebefore = datebefore;
         this.learnmode = learnmode;
@@ -39,7 +35,7 @@ public class Archive implements RunnableFuture{
     @Override
     public void run() {
         //открыть ящик
-        threadName = mailbox.mailbox+"/"+folder;
+        String threadName = mailbox.mailbox + "/" + folder;
         Thread.currentThread().setName(threadName);
 
         Folder folder = null;
@@ -111,7 +107,7 @@ public class Archive implements RunnableFuture{
     @Override
     public boolean cancel(boolean mayInterruptIfRunning) {
         shouldCancel = true;
-        return shouldCancel;
+        return true;
     }
 
     @Override
@@ -162,8 +158,5 @@ public class Archive implements RunnableFuture{
 
         return true;
     }
-
-
-    final public static Pattern fieldsPattern = Pattern.compile("\\(\\?<(\\w+)>");
 
 }
