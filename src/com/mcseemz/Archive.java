@@ -54,7 +54,7 @@ public class Archive implements RunnableFuture{
             Message[] messages = folder.search(ft);
             System.out.println("for folder " + folder + " found total messages:" + messages.length);
 
-            for (Message message : messages) {
+messages:   for (Message message : messages) {
                 boolean isprocessed = false;
                 for (Rule rule : rules) {
                     if (shouldCancel) {

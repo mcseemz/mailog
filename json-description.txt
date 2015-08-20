@@ -1,7 +1,9 @@
 rule file
 {
-//rule
+//rule. unique, mandatory. used in reload
 	"name":"test1",
+//current version. optional. used in reload
+	"version":"1a",
 //name of mailbox to monitor
 	"mailbox":"asd@asd.com",
 //folder in mailbox
@@ -52,6 +54,8 @@ rule file
 {
 //template name
 	"name":"template1",
+//current version. optional. used in reload
+	"version":"1a",
 //reporting details
 	"report":{
 //number of records to accumulate before sending email
@@ -89,7 +93,23 @@ rule file
 		"delete":true
 //mark source emails unseen if not delete. optional. default false
 		"seen":true
-	}
+	},
+//alert description. there can be more than one alert in template
+    "alert": {
+//name. unique in template, mandatory. used for reload
+        "name":"alert",
+//how many records added to template
+        "count":1,
+//in last period. support keyword "today" - since 00:00
+        "frequency":"5m",
+//mailbox for sending alert email
+        "mailbox":"m.zarudnyak@bgoperator.com",
+//email recipient
+        "to":"m.zarudnyak@bgoperator.com",
+//email subject. "ALERT:" prefix added automatically
+        "subject":"too much emails!"
+    }
+
 }
 
 
@@ -99,11 +119,11 @@ rule file
 {
 //name of mailbox
 	"mailbox":"asd@asd.com",
-//password. can be prefilled. if not filled, will be requested upon startup
+//password. optional. if not filled, will be requested upon startup for each mailbox
 	"password":"",
-	"imap_address":"mx.bgoperator.com",
+	"imap_address":"mail.asd.com",
 	"imap_port":143,
-	"smtp_address":"mx.bgoperator.com",
+	"smtp_address":"mail.asd.com",
 	"smtp_port":25,
 //smtp authentication
 	"smtp_auth":true,

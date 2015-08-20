@@ -18,12 +18,13 @@ import java.util.regex.Matcher;
  * Created by mcseem on 08.08.15.
  */
 public class Template {
-    String name = "";
+    String name = "default";
+    /**version for reaload*/
+    String version = "";
     int report_records;
     String report_subject = "";
     String report_to = "";
     String report_mailbox = "";
-    List<String> report_format = new ArrayList<>();
     /**
      * сообщения, который пойдут в отчет
      */
@@ -31,12 +32,15 @@ public class Template {
     List<Section> sections = new ArrayList<>();
     /**alerts list for this template*/
     List<Alert> alerts = new ArrayList<>();
+    Set<Message> currentMessages = new HashSet<>();
     /**
      * отправлять ли письма в принципе. Отклчюается, если нужно собрать пписьма по каким-то правилам и удалить
      */
     public boolean toSend = true;
     public boolean toDelete = true;
     public boolean toUnseen = false;
+    /**блокирующий объект. по нему блокируем при обновлениишаблона*/
+    public final Boolean block = Boolean.TRUE;
 
     static List<Template> initTemplates() throws IOException {
         final List<Template> templates = new ArrayList<>();
@@ -60,10 +64,13 @@ public class Template {
 
     static Template parseTemplate(JsonReader reader) throws IOException {
         Template template = new Template();
+        List<String> report_format = new ArrayList<>();
+
         reader.beginObject();
         while (reader.hasNext()) {
             String tokenname = reader.nextName();
             if (tokenname.equals("name")) template.name = reader.nextString();
+            if (tokenname.equals("version")) template.version = reader.nextString();
             if (tokenname.equals("report")) {
                 reader.beginObject();
                 while (reader.hasNext()) {
@@ -79,7 +86,7 @@ public class Template {
                     if (tokenname.equals("format")) {
                         reader.beginArray();
                         while (reader.hasNext()) {
-                            template.report_format.add(reader.nextString());
+                            report_format.add(reader.nextString());
                         }
                         reader.endArray();
                     }
@@ -93,10 +100,10 @@ public class Template {
         //побить по секциям
         int startSection = 0;
         int endSection = 0;
-        while (endSection < template.report_format.size()) {
-            if (template.report_format.get(endSection).contains(Main.KEYWORD_SECTION)) {
+        while (endSection < report_format.size()) {
+            if (report_format.get(endSection).contains(Main.KEYWORD_SECTION)) {
                 Section section = new Section();
-                section.format.addAll(template.report_format.subList(startSection, endSection + 1));
+                section.format.addAll(report_format.subList(startSection, endSection + 1));
                 template.sections.add(section);
                 startSection = endSection + 1;
                 endSection = startSection;
@@ -104,7 +111,7 @@ public class Template {
             endSection++;
         }
         Section section1 = new Section();
-        section1.format.addAll(template.report_format.subList(startSection, endSection));
+        section1.format.addAll(report_format.subList(startSection, endSection));
         template.sections.add(section1);
 
         System.out.println("template:sections");
@@ -136,16 +143,13 @@ public class Template {
     }
 
 
-    static class Section {
+    public static class Section {
         List<String> format = new ArrayList<>();
         int records = 0;
         StringBuilder report = new StringBuilder();
         Set<String> usedFields = new HashSet<>();
         boolean oneTime = false;
     }
-
-
-    Set<Message> currentMessages = new HashSet<>();
 
     /**
      * добавление записи

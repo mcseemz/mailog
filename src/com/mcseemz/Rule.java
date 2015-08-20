@@ -8,9 +8,11 @@ import javax.mail.MessagingException;
 import javax.mail.Multipart;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.Reader;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.*;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -19,12 +21,14 @@ import java.util.regex.Pattern;
  * Created by mcseem on 08.08.15.
  */
 public class Rule {
-    String name;
+    String name="default";
+    String version="";
     String mailbox;
     String folder;
     String subject = "";
     String from = "";
     String to = "";
+    final Boolean block = Boolean.TRUE;
     /**
      * возраст сообщения. формат "&lt;3D","&gt;=10H". знак сравнения - величина - единица D/H/M
      */
@@ -36,7 +40,7 @@ public class Rule {
     Template templateObject;
 
     static List<Rule> initRules() throws IOException {
-        final List<Rule> rules = new ArrayList<>();
+        final List<Rule> rules = new CopyOnWriteArrayList<>();
 
         Files.walkFileTree(Paths.get(Main.workdir + "/rules"), new SimpleFileVisitor<Path>() {
             @Override
@@ -44,58 +48,69 @@ public class Rule {
                 System.out.println("processing rule file: " + file.getFileName());
 
                 InputStreamReader ireader = new InputStreamReader(Files.newInputStream(file));
-                Rule rule = new Rule();
-
                 JsonReader reader = new JsonReader(ireader);
-                reader.beginObject();
-                while (reader.hasNext()) {
-                    String tokenname = reader.nextName();
-                    if (tokenname.equals("name")) rule.name = reader.nextString();
-                    if (tokenname.equals("mailbox")) rule.mailbox = reader.nextString().toLowerCase();
-                    if (tokenname.equals("folder")) rule.folder = reader.nextString();
-                    if (tokenname.equals("subject")) rule.subject = reader.nextString();
-                    if (tokenname.equals("from")) rule.from = reader.nextString();
-                    if (tokenname.equals("to")) rule.to = reader.nextString();
-                    if (tokenname.equals("age")) rule.age = reader.nextString();
-                    if (tokenname.equals("template")) rule.template = reader.nextString();
-                    if (tokenname.equals("body")) {
-                        reader.beginArray();
-                        List<String> section = new ArrayList<>();
 
-                        while (reader.hasNext()) {
-                            section.add(reader.nextString());
-                        }
-
-                        rule.body.add(section);
-                        reader.endArray();
-                    }
-                    if (tokenname.equals("bodysplitter")) {
-                        reader.beginArray();
-                        while (reader.hasNext()) {
-                            rule.sectionsplitter.add(reader.nextString());
-                        }
-                        reader.endArray();
-                    }
-                    if (tokenname.equals("templatebody")) {
-                        Template template = Template.parseTemplate(reader);
-                        rule.template = template.name;
-                        rule.templateObject = template;
-                    }
-                    if (tokenname.equals("flags")) {
-                        reader.beginObject();
-                        while (reader.hasNext()) {
-                            rule.flags.put(reader.nextName(), reader.nextString());
-                        }
-                        reader.endObject();
-                    }
-                }
-                reader.endObject();
+                Rule rule = parseRule(reader);
                 rules.add(rule);
                 return FileVisitResult.CONTINUE;
             }
 
         });
         return rules;
+    }
+
+    public String getKey() {
+        return mailbox+"#"+folder;
+    }
+
+    public static Rule parseRule(JsonReader reader) throws IOException {
+        Rule rule = new Rule();
+
+        reader.beginObject();
+        while (reader.hasNext()) {
+            String tokenname = reader.nextName();
+            if (tokenname.equals("name")) rule.name = reader.nextString();
+            if (tokenname.equals("version")) rule.version = reader.nextString();
+            if (tokenname.equals("mailbox")) rule.mailbox = reader.nextString().toLowerCase();
+            if (tokenname.equals("folder")) rule.folder = reader.nextString();
+            if (tokenname.equals("subject")) rule.subject = reader.nextString();
+            if (tokenname.equals("from")) rule.from = reader.nextString();
+            if (tokenname.equals("to")) rule.to = reader.nextString();
+            if (tokenname.equals("age")) rule.age = reader.nextString();
+            if (tokenname.equals("template")) rule.template = reader.nextString();
+            if (tokenname.equals("body")) {
+                reader.beginArray();
+                List<String> section = new ArrayList<>();
+
+                while (reader.hasNext()) {
+                    section.add(reader.nextString());
+                }
+
+                rule.body.add(section);
+                reader.endArray();
+            }
+            if (tokenname.equals("bodysplitter")) {
+                reader.beginArray();
+                while (reader.hasNext()) {
+                    rule.sectionsplitter.add(reader.nextString());
+                }
+                reader.endArray();
+            }
+            if (tokenname.equals("templatebody")) {
+                Template template = Template.parseTemplate(reader);
+                rule.template = template.name;
+                rule.templateObject = template;
+            }
+            if (tokenname.equals("flags")) {
+                reader.beginObject();
+                while (reader.hasNext()) {
+                    rule.flags.put(reader.nextName(), reader.nextString());
+                }
+                reader.endObject();
+            }
+        }
+        reader.endObject();
+        return rule;
     }
 
     public boolean processMessage(Message message) throws MessagingException {

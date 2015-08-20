@@ -18,31 +18,31 @@ public class Alert {
     /**
      * repetitions for alert
      */
-    private int count;
+    public int count;
     /**
      * time span for alert
      */
-    private int seconds;
+    public int seconds;
     /**
      * mailbox to send alert from
      */
-    private String mailbox;
+    public String mailbox;
     /**
      * email to send alert to
      */
-    private String to;
+    public String to;
     /**
      * alert email subject
      */
-    private String subject;
+    public String subject;
     /**
      * alert name
      */
-    private String name;
+    public String name;
     /**
      * reset alert on date change
      */
-    private boolean isToday = false;
+    public boolean isToday = false;
 
     LinkedBlockingQueue<Date> list = new LinkedBlockingQueue<>(1);
 
@@ -76,6 +76,8 @@ public class Alert {
             if (tokenname.equals("mailbox")) alert.mailbox = reader.nextString();
         }
         reader.endObject();
+
+        if (alert.name==null) alert.name = String.valueOf(Math.random());
         return alert;
     }
 
@@ -86,10 +88,12 @@ public class Alert {
         String formattedDate = dateFormat.format(now);
         while (iterator.hasNext()) {
             Date next = iterator.next();
-            if (now.getTime()-next.getTime()/1000>seconds) iterator.remove();
+            if ((now.getTime()-next.getTime())/1000>seconds) iterator.remove();
             else if (isToday && !formattedDate.equals(dateFormat.format(next))) iterator.remove();
         }
         boolean alertSent = false;
+
+        System.out.println("alert. remains:"+list.remainingCapacity());
         //если нельзя добавить новый, то алерт, сбросить
         if (list.remainingCapacity()==0) {
             alertSent = sendAlert(record);
@@ -119,12 +123,15 @@ public class Alert {
             sb.append(entry.getKey()).append("=").append(entry.getValue()).append("\n");
         }
 
+        System.out.println("sending alert.");
         try {
             Template.sendEmail(Main.mappedmailboxes.get(mailbox), to, "ALERT: "+subject, sb, "text/plain; charset=UTF-8");
         } catch (MessagingException e) {
             e.printStackTrace();
             return false;
         }
+        System.out.println("sending alert done");
+
         return true;
     }
 

@@ -6,13 +6,13 @@ import com.sun.mail.imap.IdleManager;
 
 import javax.mail.*;
 import java.io.*;
+import java.nio.file.*;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.*;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
+import java.util.concurrent.*;
 import java.util.regex.Pattern;
+import static java.nio.file.StandardWatchEventKinds.*;
 
 public class Main {
 
@@ -75,15 +75,15 @@ public class Main {
         Mailbox[] mailboxes = initMailboxes();
 
         //инициализировать шаблоны
-        List<Template> templates = Template.initTemplates();
+        templates = Template.initTemplates();
 
         //инициализировать правила
-        List<Rule> rules = Rule.initRules();
-
+        rules = Rule.initRules();
         Map<String, List<Rule>> mappedrules = new HashMap<>();
 
-        //сгруппировать правила по ящикам и папкам
-        for (Rule rule : rules) {
+        Iterator<Rule> iterator = rules.iterator();
+        while (iterator.hasNext()) {
+            Rule rule = iterator.next();
             if (rule.templateObject==null) {    //еще нет шаблона для правила
                 //проверка, что для этого правила есть шаблон
                 System.out.println("check template for rule: " + rule.name);
@@ -97,15 +97,18 @@ public class Main {
                 }
                 if (!templateFound) {
                     System.out.println("no template found for " + rule.template);
-                    continue;
+                    iterator.remove();
                 }
                 /*todo если шаблонов несколько, то поменять принцип
                 выкидывать отсутствующие шаблоны из правила. Если вообще не осталось шаблонов, то выкинуть правило*/
             }
+        }
 
-            String key = rule.mailbox+"#"+rule.folder;
+        //сгруппировать правила по ящикам и папкам
+        for (Rule rule : rules) {
+            String key = rule.getKey();
             if (!mappedrules.containsKey(key))
-                mappedrules.put(key, new ArrayList<Rule>());
+                mappedrules.put(key, new CopyOnWriteArrayList<Rule>());
             mappedrules.get(key).add(rule);
         }
 
@@ -132,27 +135,28 @@ public class Main {
             }
         }
 
+        //filewatcher usable only in monitoring mode
+        if (!isNomonitor) {
+            watchService = FileSystems.getDefault().newWatchService();
+
+            ftemplate = Paths.get(workdir + "/templates").register(watchService, ENTRY_CREATE, ENTRY_MODIFY);
+            Thread fileWatcher = new Thread(new FileWatcher(ftemplate, FileWatcher.MODE_TEMPLATE));
+            fileWatcher.start();
+
+            frule = Paths.get(workdir + "/rules").register(watchService, ENTRY_CREATE, ENTRY_MODIFY);
+//            Thread fileWatcher2 = new Thread(new FileWatcher(frule, FileWatcher.MODE_RULE));
+//            fileWatcher2.start();
+        }
+
+
         //инициализация обработчиков idle
         if (!isNomonitor)
         for (Map.Entry<String, List<Rule>> entry : mappedrules.entrySet()) {
-            Folder folder;
             try {
-                Session session = mappedIdleSessions.get(entry.getValue().get(0).mailbox);
-                Store store = session.getStore("imap");
-                if (!store.isConnected()) {
-                    Mailbox mailbox = mappedmailboxes.get(entry.getValue().get(0).mailbox);
-                    store.connect(mailbox.imap_address, mailbox.imap_port, mailbox.mailbox, mailbox.password);
-                }
-                folder = store.getFolder(entry.getValue().get(0).folder);
-                folder.open(Folder.READ_WRITE);
-
-                IdleManager idleManager = mappedIdleManagers.get(entry.getValue().get(0).mailbox);
-
-                folder.addMessageCountListener(new IdleAdapter(idleManager, session, entry.getValue()));
-                idleManager.watch(folder);
-
+                IdleAdapter.addIdleAdapter(entry.getKey(), entry.getValue());
             } catch (Exception e) {
                 e.printStackTrace(System.out);
+                System.exit(-5);
             }
         }
 
@@ -180,6 +184,7 @@ public class Main {
 
             executorService.shutdownNow();
         }
+
 //        System.exit(0);
         System.out.println("main thread exits;");
     }
@@ -222,13 +227,19 @@ public class Main {
 
     /** mapping mailbox name to object*/
     public static final Map<String, Mailbox> mappedmailboxes = new HashMap<>();
-    private static final Map<String, IdleManager> mappedIdleManagers = new HashMap<>();
-    private static final Map<String, Session> mappedIdleSessions = new HashMap<>();
+    public static final Map<String, IdleManager> mappedIdleManagers = new HashMap<>();
+    public static final Map<String, Session> mappedIdleSessions = new ConcurrentHashMap<>();
+    public static final Map<String, IdleAdapter> mappedIdleAdapters = new ConcurrentHashMap<>();
     private static List<Future> archiveList = new ArrayList<>();
     /** archive mode turned on */
     public static boolean isArchive = false;
     /** do not send uncomplete report after archiving */
     public static boolean isNoflush = false;
+
+    /**global rules list*/
+    public static List<Rule> rules = null;
+    /**global templates list */
+    public static List<Template> templates = null;
 
     final static String KEYWORD_SECTION = "#section";
     final static String KEYWORD_DATE = "#mdate";
@@ -240,4 +251,11 @@ public class Main {
     public static final ExecutorService listenerExecutor = Executors.newCachedThreadPool();
     final public static Pattern fieldsPattern = Pattern.compile("<(#?\\w+)>");
     final public static Pattern fieldsFormatPattern = Pattern.compile("<(#?\\w+)(#.?\\d+\\w?)?>");
+    static public WatchService watchService = null;
+    static public Thread fileWatcher = null;
+
+    static WatchKey ftemplate;
+    static WatchKey frule;
+
+
 }
