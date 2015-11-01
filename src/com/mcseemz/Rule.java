@@ -13,6 +13,8 @@ import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -45,7 +47,7 @@ public class Rule {
         Files.walkFileTree(Paths.get(Main.workdir + "/rules"), new SimpleFileVisitor<Path>() {
             @Override
             public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-                System.out.println("processing rule file: " + file.getFileName());
+                logger.info("processing rule file: " + file.getFileName());
 
                 InputStreamReader ireader = new InputStreamReader(Files.newInputStream(file));
                 JsonReader reader = new JsonReader(ireader);
@@ -116,15 +118,15 @@ public class Rule {
     public boolean processMessage(Message message) throws MessagingException {
         String subject = message.getSubject();
         if (subject.startsWith("RPT:")) {
-            System.out.println("report message detected. Skip");
+            logger.info("report message detected. Skip");
             return false;
         }
         if (subject.startsWith("ALERT:")) {
-            System.out.println("alert message detected. Skip");
+            logger.info("alert message detected. Skip");
             return false;
         }
 
-        System.out.println("now rule:" + this.name);
+        logger.info("now rule:" + this.name);
 
         boolean messageProcessed = false;
 
@@ -132,19 +134,19 @@ public class Rule {
             Pattern psubject = Pattern.compile(this.subject);
             Matcher subjectMatcher = psubject.matcher(subject);
             if (!subjectMatcher.find()) {
-                System.out.println("subject failed:" + subject);
+                logger.info("subject failed:" + subject);
                 return false;
             }
-            System.out.println("subject:" + subject);
+            logger.info("subject:" + subject);
 
             if (!this.from.isEmpty()) {
                 Pattern pfrom = Pattern.compile(this.from);
                 Matcher fromMatcher = pfrom.matcher(message.getFrom()[0].toString());
                 if (!fromMatcher.find()) {
-                    System.out.println("from failed:" + message.getFrom()[0].toString());
+                    logger.info("from failed:" + message.getFrom()[0].toString());
                     return false;
                 }
-                System.out.println("from:" + message.getFrom()[0].toString());
+                logger.info("from:" + message.getFrom()[0].toString());
             }
 
             //todo проверка на другие поля из шапки
@@ -169,7 +171,7 @@ public class Rule {
                 else if (this.age.contains("<") && diff < val) ;
                 else if (this.age.contains("<=") && diff <= val) ;
                 else {
-                    System.out.println("age failed:" + this.age + "/" + diff);
+                    logger.info("age failed:" + this.age + "/" + diff);
                     return false;
                 }
             }
@@ -182,7 +184,7 @@ public class Rule {
             String contentType = message.getContentType();
             StringBuilder text = new StringBuilder();
 
-            System.out.println("contentType:" + contentType);
+            logger.info("contentType:" + contentType);
 
 
             if (contentType.contains("multipart")) {
@@ -191,7 +193,7 @@ public class Rule {
                     BodyPart bodyPart = multipart.getBodyPart(j);
                     String bodyPartContentType = bodyPart.getContentType();
 
-                    System.out.println("bodyPartContentType:" + contentType);
+                    logger.info("bodyPartContentType:" + contentType);
 
                     if (bodyPartContentType.contains("text/plain")) {
                         text.append(bodyPart.getContent());
@@ -204,7 +206,7 @@ public class Rule {
                             bodyPart = multipart.getBodyPart(k);
                             bodyPartContentType = bodyPart.getContentType();
 
-                            System.out.println("bodyPartContentType:" + contentType);
+                            logger.info("bodyPartContentType:" + contentType);
 
                             if (bodyPartContentType.contains("text/plain")) {
                                 text.append(bodyPart.getContent());
@@ -230,7 +232,7 @@ public class Rule {
             while (fieldMatcher.find()) subjectFields.add(fieldMatcher.group(1));
 
 
-            System.out.println("subjectFields found:" + subjectFields);
+            logger.info("subjectFields found:" + subjectFields);
 
             //разбиваем по секциям
             //todo бить по всем опмсателям секций, а не только по первому
@@ -238,7 +240,7 @@ public class Rule {
                     ? new String[]{text.toString()}
                     : text.toString().split(this.sectionsplitter.get(0));
 
-            System.out.println("rule:sections size:" + sections.length);
+            logger.info("rule:sections size:" + sections.length);
 
             Map<String, String> subjectrecord = new HashMap<>();
             //кладем поля и темы в запись
@@ -251,7 +253,7 @@ public class Rule {
 
             section:
             for (String section : sections) {
-                System.out.println("rule: section:" + section);
+                logger.info("rule: section:" + section);
 
                 //теперь поля из тела
                 bodyrules:
@@ -270,7 +272,7 @@ public class Rule {
                             allbodyfields.add(bodyMatcher.group(1));
                         }
 
-                        System.out.println("rule:bodyFields found:" + bodyFields);
+                        logger.info("rule:bodyFields found:" + bodyFields);
 
                         Pattern pbody = Pattern.compile(bodyrule);
                         Matcher mbody = pbody.matcher(section);
@@ -288,7 +290,7 @@ public class Rule {
                                 record.put(bodyFields.get(i).toLowerCase() + "_flags", "b");
                             }
                         }
-                        if (!isFound) System.out.println("rule:not found");
+                        if (!isFound) logger.info("rule:not found");
 
                         bodyrulefields.addAll(bodyFields);
                     }
@@ -299,19 +301,19 @@ public class Rule {
                                 && !record.containsKey(bodyField.toLowerCase())
                                 ) {
                             //обязательное поле не заполнено
-                            System.out.println("rule:required field " + bodyField + " not filled");
+                            logger.info("rule:required field " + bodyField + " not filled");
                             continue bodyrules;
                         }
                     }
                     //нашлись поля для этой секции
-                    System.out.println("rule:fields found:");
+                    logger.info("rule:fields found:");
                     for (Map.Entry<String, String> entry : record.entrySet()) {
-                        System.out.println("rule:"+entry.getKey() + "=" + entry.getValue());
+                        logger.info("rule:" + entry.getKey() + "=" + entry.getValue());
                     }
 
                     this.templateObject.addRecord(record, message);
                     messageProcessed = true;
-                    System.out.println("rule: record added");
+                    logger.info("rule: record added");
                     continue section;   //эту секцию отработали
 
                 }
@@ -324,11 +326,11 @@ public class Rule {
 
                     this.templateObject.addRecord(record, message);
                     messageProcessed = true;
-                    System.out.println("rule: empty body record added");
+                    logger.info("rule: empty body record added");
             }
 
         } catch (Exception ex) {
-            ex.printStackTrace(System.out);
+            logger.log(Level.SEVERE, "caught exception", ex);
         }
 
         if (messageProcessed) {
@@ -337,5 +339,8 @@ public class Rule {
         }
         return messageProcessed;
     }
+
+    private static final Logger logger =
+            Logger.getLogger(Rule.class.getName());
 
 }

@@ -66,7 +66,7 @@ Warning: all object matching goes on name attribute in object, not filename!
 When new/updated filed detected:
 
 1. if name and version already exist in runtime, file skipped.
-2. if name not exist, this is new object, we should add it to processing list. Mind that if you add rule with link on non-existing template, result is unpredictable.
+2. if name not exist, this is new object, we should add it to processing list. Mind that if you add rule with link to non-existing template, result is unpredictable.
 3. if name exist but version differs, update procedure fills fields not touching runtime parts. This means:
 - template sections are updated, but their reports not reset. So you'll get part of report in old style.
 - if old/new template sections list differs - it will be adjusted.
@@ -77,14 +77,10 @@ like stats become ready to send alert now. Still, one more event will be require
 no file deletion currently supported. So if you want to stop some template/rule from working - break it and update.
 rule cannot change mailbox/folder currently.
 
-<h3>Scenarios</h3>
-TBD
-
 
 <h3>Plans</h3>
 <ol>
 <li>Semiautomatc learning mode - understanding templates.</li>
-<li>Switch System.out to log4j</li>
 <li>Complete documentation</li>
 </ol>
 

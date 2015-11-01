@@ -22,6 +22,7 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.logging.Logger;
 
 /**
  * Offers an API to parse commands to a console application
@@ -309,7 +310,7 @@ public class ParseCmd {
      * @return
      */
     public Map<String,String> parse(String[] args) {    // merge args & defaults
-        Map<String,String> R = new LinkedHashMap<String,String>();
+        Map<String,String> R = new LinkedHashMap<>();
         List<String> A = filterMonadics(args);          // detect and fill mons
         String k,v;
         for(int i=0;i<A.size()-1;i +=2) {
@@ -327,7 +328,7 @@ public class ParseCmd {
 
     private List<String> findRequired() {               // List <- required args
         String k;
-        List<String> R = new ArrayList<String>();
+        List<String> R = new ArrayList<>();
         for(Iterator p = Parms.keySet().iterator(); p.hasNext();) { // iterate
             k = (String) p.next();                      // over Parms.ketSet()
             if(isReq(k)) R.add(k);                      // add it if required
@@ -440,14 +441,18 @@ public class ParseCmd {
                 .parm("-verbose", "0").rex("^[01]{1}$")
                 .build();
 
-        Map<String,String> R = new HashMap<String,String>();
+        Map<String,String> R;
         String parseError    = cmd.validate(args);
         if( cmd.isValid(args) ) {
             R = cmd.parse(args);
-            System.out.println(cmd.displayMap(R));
+            logger.info(cmd.displayMap(R));
         }
-        else { System.out.println(parseError); System.exit(1); }
+        else { logger.info(parseError); System.exit(1); }
     }
     // R contains default or input values for defined parms and used as in:
     // long loopLimit = Long.parseLong( R.get("-loop"));
+
+    private static final Logger logger =
+            Logger.getLogger(ParseCmd.class.getName());
+
 }

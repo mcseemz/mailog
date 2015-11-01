@@ -6,9 +6,8 @@
 	"from":"noreply@test.com",
 	"to":".*",
 	"body":[
-		"data1=(?<field3>\\w{5})",
+		"data1=(?<field3>\\w{5})"
 	],
-	"section": [],
 	"flags":{
 	},
 

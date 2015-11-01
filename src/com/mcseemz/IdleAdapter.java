@@ -6,6 +6,8 @@ import javax.mail.*;
 import javax.mail.event.MessageCountAdapter;
 import javax.mail.event.MessageCountEvent;
 import java.util.List;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Created by mcseem on 04.08.15.
@@ -48,8 +50,8 @@ public class IdleAdapter extends MessageCountAdapter {
     public void messagesAdded(MessageCountEvent ev) {
         Folder folder = (Folder) ev.getSource();
         Message[] msgs = ev.getMessages();
-        System.out.println("Folder: " + folder +
-                " got " + msgs.length + " new messages");
+        logger.info("Folder: " + folder +
+                            " got " + msgs.length + " new messages");
 
         for (Message message : msgs) {
             for (Rule rule : rules) {
@@ -58,7 +60,7 @@ public class IdleAdapter extends MessageCountAdapter {
                         try {
                             rule.processMessage(message);
                         } catch (javax.mail.MessageRemovedException ex) {
-                            System.out.println("message removed already!");
+                            logger.info("message removed already!");
                             break;
                         }
                     }
@@ -72,9 +74,12 @@ public class IdleAdapter extends MessageCountAdapter {
             // process new messages
             idleManager.watch(folder); // keep watching for new messages
         } catch (MessagingException mex) {
-            mex.printStackTrace(System.out);
+            logger.log(Level.SEVERE, "caught exception", mex);
             // handle exception related to the Folder
         }
     }
+
+    private static final Logger logger =
+            Logger.getLogger(IdleAdapter.class.getName());
 
 }

@@ -9,9 +9,10 @@ import java.util.Date;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.logging.Logger;
 
 /**
- * Alert instanse and initializations
+ * Alert instance and initializations
  * Created by mcseem on 16.08.15.
  */
 public class Alert {
@@ -93,7 +94,7 @@ public class Alert {
         }
         boolean alertSent = false;
 
-        System.out.println("alert. remains:"+list.remainingCapacity());
+        logger.info("alert. remains:"+list.remainingCapacity());
         //если нельзя добавить новый, то алерт, сбросить
         if (list.remainingCapacity()==0) {
             alertSent = sendAlert(record);
@@ -123,17 +124,20 @@ public class Alert {
             sb.append(entry.getKey()).append("=").append(entry.getValue()).append("\n");
         }
 
-        System.out.println("sending alert.");
+        logger.info("sending alert.");
         try {
             Template.sendEmail(Main.mappedmailboxes.get(mailbox), to, "ALERT: "+subject, sb, "text/plain; charset=UTF-8");
         } catch (MessagingException e) {
             e.printStackTrace();
             return false;
         }
-        System.out.println("sending alert done");
+        logger.info("sending alert done");
 
         return true;
     }
 
     SimpleDateFormat dateFormat = new SimpleDateFormat("dd.MM.yyyy");
+
+    private static final Logger logger =
+            Logger.getLogger(Alert.class.getName());
 }

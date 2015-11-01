@@ -11,6 +11,7 @@ import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.text.SimpleDateFormat;
 import java.util.*;
+import java.util.logging.Logger;
 import java.util.regex.Matcher;
 
 /**
@@ -48,7 +49,7 @@ public class Template {
         Files.walkFileTree(Paths.get(Main.workdir + "/templates"), new SimpleFileVisitor<Path>() {
             @Override
             public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-                System.out.println("processing template file: " + file.getFileName());
+                logger.info("processing template file: " + file.getFileName());
                 InputStreamReader ireader = new InputStreamReader(Files.newInputStream(file));
                 JsonReader reader = new JsonReader(ireader);
 
@@ -114,12 +115,12 @@ public class Template {
         section1.format.addAll(report_format.subList(startSection, endSection));
         template.sections.add(section1);
 
-        System.out.println("template:sections");
+        logger.info("template:sections");
         for (Section section : template.sections) {
-            System.out.println("template:section format");
+            logger.info("template:section format");
 
             for (String line : section.format) {
-                System.out.println(line);
+                logger.info(line);
 
                 Matcher fieldsMatcher = Main.fieldsFormatPattern.matcher(line);
                 while (fieldsMatcher.find())
@@ -130,8 +131,8 @@ public class Template {
                 section.oneTime = true; //один раз выводим
             }
 
-            System.out.println("template:section onetime:" + section.oneTime);
-            System.out.println("template:usedfields:" + section.usedFields);
+            logger.info("template:section onetime:" + section.oneTime);
+            logger.info("template:usedfields:" + section.usedFields);
 
             section.usedFields.add(Main.KEYWORD_DATE);
             section.usedFields.add(Main.KEYWORD_TIME);
@@ -159,13 +160,13 @@ public class Template {
      */
     public boolean addRecord(Map<String, String> record, Message message) {
         for (Map.Entry<String, String> entry : record.entrySet()) {
-            System.out.println(entry.getKey() + "=" + entry.getValue());
+            logger.info(entry.getKey() + "=" + entry.getValue());
         }
 
         //добавить запись
         currentRecords.add(record);
         currentMessages.add(message);
-        System.out.println("template: record added. Now:" + currentRecords.size() + " / " + currentMessages.size());
+        logger.info("template: record added. Now:" + currentRecords.size() + " / " + currentMessages.size());
 
         try {
             record.put(Main.KEYWORD_DATE, date.format(message.getSentDate()));
@@ -183,18 +184,18 @@ public class Template {
 
 
         for (Section section : sections) {
-            System.out.println("template: section start "+section.format.size()+" "+section.oneTime+" "+section.records);
+            logger.info("template: section start "+section.format.size()+" "+section.oneTime+" "+section.records);
             if (section.format.isEmpty()) section.records++;    //просто считаем письма
             if (section.oneTime && section.records > 0) continue;   //если вообще нет полей
 
             boolean notEmpty = false;
             for (String usedField : section.usedFields) {
                 usedField = usedField.replaceAll("#.?\\d+","");    //отрезаем цифры
-                System.out.println("now usedfield: " + usedField);
+                logger.info("now usedfield: " + usedField);
                 if (record.containsKey(usedField.toLowerCase()))  notEmpty = true;
                 //если поле обязательное, а его нет
                 if (!record.containsKey(usedField.toLowerCase()) && !usedField.toLowerCase().equals(usedField)) {
-                    System.out.println("template: no required field: "+usedField);
+                    logger.info("template: no required field: "+usedField);
                     notEmpty = false;
                     break;
                 }
@@ -268,7 +269,7 @@ public class Template {
         }
 
         currentRecords.clear();
-        System.out.println("currentMessages to delete: " + currentMessages.size());
+        logger.info("currentMessages to delete: " + currentMessages.size());
         for (Message currentMessage : currentMessages) {
             try {
                 if (toDelete)
@@ -336,4 +337,7 @@ public class Template {
         перегружаем поля, кроме накопленных
     при обнаружении нового догружаем в список
      */
+
+    private static final Logger logger =
+            Logger.getLogger(Template.class.getName());
 }

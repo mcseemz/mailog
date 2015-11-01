@@ -7,6 +7,8 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.RunnableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Created by mcseem on 24.07.15.
@@ -42,24 +44,24 @@ public class Archive implements RunnableFuture{
         try {
             folder = openSession(mailbox, this.folder);
 
-            System.out.println("folder opened");
-            System.out.println("rules.size "+rules.size());
+            logger.info("folder opened");
+            logger.info("rules.size " + rules.size());
             //идем по правилам
 
-            System.out.println("going search");
+            logger.info("going search");
             FlagTerm ft = new FlagTerm(new Flags(Flags.Flag.DELETED), false);
 //                SearchTerm st = new SubjectTerm(rule.subject);
 //                AndTerm andTerm = new AndTerm(ft,st);
 //                Message[] messages = folder.search(andTerm);
             Message[] messages = folder.search(ft);
-            System.out.println("for folder " + folder + " found total messages:" + messages.length);
+            logger.info("for folder " + folder + " found total messages:" + messages.length);
 
 messages:   for (Message message : messages) {
                 boolean isprocessed = false;
                 for (Rule rule : rules) {
                     if (shouldCancel) {
                         isCancelled = true;
-                        System.out.println("should cancel detected");
+                        logger.info("should cancel detected");
                         break;
                     }
                     if (datebefore!=null && message.getSentDate().compareTo(datebefore)>0) continue;    //ограничение по датам
@@ -67,7 +69,7 @@ messages:   for (Message message : messages) {
                     try {
                         isprocessed |= rule.processMessage(message);
                     } catch (javax.mail.MessageRemovedException ex) {
-                        System.out.println("message removed already!");
+                        logger.info("message removed already!");
                     }
                 }
 
@@ -86,8 +88,7 @@ messages:   for (Message message : messages) {
                 rule.templateObject.flush();    //send letters
             }
         } catch (Exception e) {
-            e.printStackTrace(System.out);
-
+            logger.log(Level.SEVERE, "caught exception", e);
         } finally {
             try {
                 if (folder!=null) {
@@ -95,7 +96,7 @@ messages:   for (Message message : messages) {
                     folder.close(true);
                 }
                 closeSession();
-                System.out.println(Thread.currentThread().getName()+" done");
+                logger.info(Thread.currentThread().getName() + " done");
                 isCancelled = true;
             } catch (MessagingException e) {
                 e.printStackTrace();
@@ -138,17 +139,17 @@ messages:   for (Message message : messages) {
         imapsession = Session.getDefaultInstance(props, null);
         imapsession.setDebug(false);
         for (Provider provider : imapsession.getProviders())
-            System.out.println("we have provider:"+provider.getProtocol()+" "+provider.getType()+" "+provider.getClassName());
+            logger.info("we have provider:" + provider.getProtocol() + " " + provider.getType() + " " + provider.getClassName());
         store = imapsession.getStore("imap");
 //				Store store = imapsession.getStore("imaps");
         store.connect(mailbox.imap_address, mailbox.imap_port, mailbox.mailbox, mailbox.password);
-        System.out.println(store);
+        logger.info(store.toString());
 
-        System.out.println("getting folder");
+        logger.info("getting folder");
         Folder fld = store.getFolder(folder);
-        System.out.println("done");
+        logger.info("done");
         fld.open(Folder.READ_WRITE);
-        System.out.println("opening done");
+        logger.info("opening done");
         return fld;
     }
 
@@ -158,5 +159,8 @@ messages:   for (Message message : messages) {
 
         return true;
     }
+
+    private static final Logger logger =
+            Logger.getLogger(Archive.class.getName());
 
 }

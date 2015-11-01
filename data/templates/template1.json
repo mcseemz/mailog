@@ -1,4 +1,4 @@
-	{
+{
 	"name":"template1",
 	"report":{
 		"records":10,
@@ -7,7 +7,7 @@
 		"format":[
 			"date	time	field1	field2 field3	from	folder",
 			"<#section>",
-			"<#mdate> <#mtime> <field1>	<field2>		<field3>	mfrom> <#mfolder>",
+			"<#mdate> <#mtime> <field1>	<field2>		<field3>	mfrom> <#mfolder>"
 		],
 		"subject":"UNI process"
 	}

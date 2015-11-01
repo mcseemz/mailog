@@ -11,6 +11,9 @@ import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.logging.Level;
+import java.util.logging.LogManager;
+import java.util.logging.Logger;
 import java.util.regex.Pattern;
 import static java.nio.file.StandardWatchEventKinds.*;
 
@@ -18,6 +21,11 @@ public class Main {
 
     public static void main(String[] args) throws IOException, MessagingException {
         //https://code.google.com/p/parse-cmd/
+        if (System.getProperty("java.util.logging.config.file")!=null)
+            LogManager.getLogManager().readConfiguration();
+        else LogManager.getLogManager().readConfiguration(new FileInputStream("./lib/logging.properties"));
+
+
         String usage = "usage: [-help] [-nomonitor] [-archive YYYY-MM-DD] [-archiveall] [-flush] [-workdir path_to_data]\n" +
                 "options:\n" +
                 "   archive    -   processes all messages before selected date, inclusive.\n" +
@@ -35,13 +43,14 @@ public class Main {
                 .parm("-archive", "0").rex("\\d{4}-\\d{2}-\\d{2}")
                 .parm("-workdir", "0").build();
 
+
         Map<String,String> R = new HashMap<>();
         String parseError    = cli.validate(args);
         if( cli.isValid(args) ) {
             R = cli.parse(args);
-            System.out.println(cli.displayMap(R));
+            logger.info(cli.displayMap(R));
         }
-        else { System.out.println(parseError); System.exit(1); }
+        else { logger.info(parseError); System.exit(1); }
 
         // R contains default or input values for defined parms and used as in:
         // long loop = Long.parseLong( R.get("-loop"));
@@ -52,15 +61,15 @@ public class Main {
         isArchive |= !R.<String>get("-archiveall").equals("0");
         Date datebefore = null;
 
-        System.out.println("isNomonitor:"+isNomonitor);
-        System.out.println("isArchive:"+isArchive);
+        logger.info("isNomonitor:"+isNomonitor);
+        logger.info("isArchive:"+isArchive);
 
         SimpleDateFormat YMD = new SimpleDateFormat("yyyy-MM-dd");
         if (!R.<String>get("-archive").equals("0")) try {
             datebefore = YMD.parse(R.<String>get("-archive"));
             datebefore.setTime(datebefore.getTime()+3600*24*1000-1);    //до конца суток
         } catch (ParseException e) {
-            System.out.println("wrong date format");
+            logger.info("wrong date format");
             System.exit(-1);
         }
 
@@ -69,7 +78,7 @@ public class Main {
         }
         else workdir = System.getProperty("user.dir")+"/data";
 
-        System.out.println("using workdir:"+workdir);
+        logger.info("using workdir:"+workdir);
 
         //инициализировать ящики
         Mailbox[] mailboxes = initMailboxes();
@@ -86,7 +95,7 @@ public class Main {
             Rule rule = iterator.next();
             if (rule.templateObject==null) {    //еще нет шаблона для правила
                 //проверка, что для этого правила есть шаблон
-                System.out.println("check template for rule: " + rule.name);
+                logger.info("check template for rule: " + rule.name);
                 boolean templateFound = false;
                 for (Template testTemplate : templates) {
                     if (testTemplate.name.equals(rule.template)) {
@@ -96,7 +105,7 @@ public class Main {
                     }
                 }
                 if (!templateFound) {
-                    System.out.println("no template found for " + rule.template);
+                    logger.info("no template found for " + rule.template);
                     iterator.remove();
                 }
                 /*todo если шаблонов несколько, то поменять принцип
@@ -116,7 +125,7 @@ public class Main {
         for (Mailbox mailbox : mailboxes) {
             if (mailbox.password.isEmpty()) {
                 Console console = System.console();
-                if (console==null) System.out.println("console is null");
+                if (console==null) logger.info("console is null");
                 else {
                     console.writer().println("enter password for: " + mailbox.mailbox);
                     char[] chars = console.readPassword();
@@ -125,7 +134,7 @@ public class Main {
             }
         }
 
-        System.out.println("rules inited");
+        logger.info("rules inited");
         //инициализация idle сессий
         for (Mailbox mailbox : mailboxes) {
             mappedmailboxes.put(mailbox.mailbox, mailbox);
@@ -155,7 +164,7 @@ public class Main {
             try {
                 IdleAdapter.addIdleAdapter(entry.getKey(), entry.getValue());
             } catch (Exception e) {
-                e.printStackTrace(System.out);
+                logger.log(Level.SEVERE, "caught exception", e);
                 System.exit(-5);
             }
         }
@@ -186,7 +195,7 @@ public class Main {
         }
 
 //        System.exit(0);
-        System.out.println("main thread exits;");
+        logger.info("main thread exits;");
     }
 
     private static Mailbox[] initMailboxes() throws FileNotFoundException {
@@ -212,13 +221,13 @@ public class Main {
         Session imapsession = Session.getDefaultInstance(props, null);
         imapsession.setDebug(true);
 //        for (Provider provider : imapsession.getProviders())
-//            System.out.println("we have idle provider:"+provider.getProtocol()+" "+provider.getType()+" "+provider.getClassName());
+//            logger.info("we have idle provider:"+provider.getProtocol()+" "+provider.getType()+" "+provider.getClassName());
 //        Store store = imapsession.getStore("imap");
 //				Store store = imapsession.getStore("imaps");
 //        store.connect(mailbox.imap_address, mailbox.imap_port, mailbox.mailbox, mailbox.password);
 //        store.getFolder("INBOX");
 
-        System.out.println("opening idleSession done");
+        logger.info("opening idleSession done");
         return imapsession;
     }
 
@@ -257,5 +266,7 @@ public class Main {
     static WatchKey ftemplate;
     static WatchKey frule;
 
+    private static final Logger logger =
+            Logger.getLogger(Main.class.getName());
 
 }

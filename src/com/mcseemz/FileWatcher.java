@@ -9,6 +9,7 @@ import java.nio.file.*;
 import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.logging.Logger;
 
 import static java.nio.file.StandardWatchEventKinds.*;
 
@@ -51,8 +52,8 @@ public class FileWatcher implements Runnable{
                 WatchEvent<Path> ev = (WatchEvent<Path>) event;
                 Path filename = ev.context();
                 if (key.equals(Main.ftemplate)) {
-                    System.out.println("template change detected:"+filename.toAbsolutePath().toString());
-                    InputStreamReader ireader = null;
+                    logger.info("template change detected:" + filename.toAbsolutePath().toString());
+                    InputStreamReader ireader;
                     try {
                         ireader = new InputStreamReader(Files.newInputStream(Paths.get(Main.workdir+"/templates/"+filename.getFileName())));
                         JsonReader reader = new JsonReader(ireader);
@@ -68,17 +69,17 @@ public class FileWatcher implements Runnable{
                                 updateTemplate(newTemplate, oldTemplate);
 
                                 processed = true;
-                                System.out.println("template "+oldTemplate.name+" v."+oldTemplate.version+" reloaded");
+                                logger.info("template " + oldTemplate.name + " v." + oldTemplate.version + " reloaded");
                             }
                             else if (oldTemplate.name.equals(newTemplate.name)
                                     && oldTemplate.version.equals(newTemplate.version)) {
-                                System.out.println("template "+oldTemplate.name+" v."+oldTemplate.version+" same, not reloaded");
+                                logger.info("template " + oldTemplate.name + " v." + oldTemplate.version + " same, not reloaded");
                                 processed = true;
                             }
 
                         if (!processed) {
                             Main.templates.add(newTemplate);
-                            System.out.println("template " + newTemplate.name + " v." + newTemplate.version + " uploaded");
+                            logger.info("template " + newTemplate.name + " v." + newTemplate.version + " uploaded");
                         }
                     } catch (IOException e) {
                         e.printStackTrace();
@@ -87,8 +88,8 @@ public class FileWatcher implements Runnable{
                 else if (key.equals(Main.frule)) {
                     //если это правило, то смотреть единый список правил
                     //rules - обновить rules и mappedrules
-                    System.out.println("rule change detected:"+filename.toAbsolutePath().toString());
-                    InputStreamReader ireader = null;
+                    logger.info("rule change detected:" + filename.toAbsolutePath().toString());
+                    InputStreamReader ireader;
                     try {
                         ireader = new InputStreamReader(Files.newInputStream(Paths.get(Main.workdir+"/rules/"+filename.getFileName())));
                         JsonReader reader = new JsonReader(ireader);
@@ -100,11 +101,11 @@ public class FileWatcher implements Runnable{
                             if (oldRule.name.equals(newRule.name)
                                     && !oldRule.version.equals(newRule.version)) {
                                 if (!oldRule.mailbox.equals(newRule.mailbox)) {
-                                    System.out.println("cannot change mailbox!! upload "+newRule.name+" v"+newRule.version+" failed");
+                                    logger.info("cannot change mailbox!! upload " + newRule.name + " v" + newRule.version + " failed");
                                     continue;
                                 }
                                 if (!oldRule.folder.equals(newRule.folder)) {
-                                    System.out.println("cannot change folder!! upload "+newRule.name+" v"+newRule.version+" failed");
+                                    logger.info("cannot change folder!! upload " + newRule.name + " v" + newRule.version + " failed");
                                     continue;
                                 }
 
@@ -141,18 +142,18 @@ public class FileWatcher implements Runnable{
 
                                 }
                                 processed = true;
-                                System.out.println("rule "+oldRule.name+" v."+oldRule.version+" reloaded");
+                                logger.info("rule " + oldRule.name + " v." + oldRule.version + " reloaded");
                                 //при обновлении ничего не нужно
                             }
                             else if (oldRule.name.equals(newRule.name)
                                     && oldRule.version.equals(newRule.version)) {
-                                System.out.println("rule "+oldRule.name+" v."+oldRule.version+" same, not reloaded");
+                                logger.info("rule " + oldRule.name + " v." + oldRule.version + " same, not reloaded");
                                 processed = true;
                             }
 
                         if (!processed) {
                             Main.rules.add(newRule);
-                            System.out.println("rule " + newRule.name + " v." + newRule.version + " uploaded");
+                            logger.info("rule " + newRule.name + " v." + newRule.version + " uploaded");
                             IdleAdapter idleAdapter = Main.mappedIdleAdapters.get(newRule.getKey());
                             if (idleAdapter==null) {    //такой папки/mailbox еще не было
                                 //создание нового
@@ -249,5 +250,8 @@ public class FileWatcher implements Runnable{
 
     public static int MODE_RULE = 0;
     public static int MODE_TEMPLATE = 1;
+
+    private static final Logger logger =
+            Logger.getLogger(FileWatcher.class.getName());
 
 }
