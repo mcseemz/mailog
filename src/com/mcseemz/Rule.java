@@ -229,7 +229,7 @@ public class Rule {
             //собрать поля из темы в список
             Matcher fieldMatcher = Main.fieldsPattern.matcher(this.subject);
             List<String> subjectFields = new ArrayList<>();
-            while (fieldMatcher.find()) subjectFields.add(fieldMatcher.group(1));
+            while (fieldMatcher.find()) subjectFields.add("_"+fieldMatcher.group(1));
 
 
             logger.info("subjectFields found:" + subjectFields);
@@ -268,13 +268,13 @@ public class Rule {
                         //ищем все поля в этом наборе правил
                         Matcher bodyMatcher = Main.fieldsPattern.matcher(bodyrule);
                         while (bodyMatcher.find()) {
-                            bodyFields.add(bodyMatcher.group(1));
-                            allbodyfields.add(bodyMatcher.group(1));
+                            bodyFields.add("_"+bodyMatcher.group(1));
+                            allbodyfields.add("_"+bodyMatcher.group(1));
                         }
 
                         logger.info("rule:bodyFields found:" + bodyFields);
 
-                        Pattern pbody = Pattern.compile(bodyrule);
+                        Pattern pbody = Pattern.compile(bodyrule, Pattern.UNICODE_CHARACTER_CLASS+Pattern.MULTILINE+Pattern.DOTALL);
                         Matcher mbody = pbody.matcher(section);
                         boolean isFound = false;
                         while (mbody.find()) {
@@ -285,7 +285,10 @@ public class Rule {
                                         && record.containsKey(bodyFields.get(i).toLowerCase())
                                         ) {
                                     //накопление данных в поле
-                                    record.put(bodyFields.get(i).toLowerCase(), record.get(bodyFields.get(i).toLowerCase()) + " | " + mbody.group(i + 1));
+                                    record.put(bodyFields.get(i).toLowerCase(), record.get(bodyFields.get(i).toLowerCase()) +
+                                            (flags.get(bodyFields.get(i).toLowerCase()).contains("n")
+                                            ? "\n"
+                                            : " | ") + mbody.group(i + 1));
                                 } else record.put(bodyFields.get(i).toLowerCase(), mbody.group(i + 1));
                                 record.put(bodyFields.get(i).toLowerCase() + "_flags", "b");
                             }

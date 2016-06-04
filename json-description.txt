@@ -36,17 +36,19 @@ rule file
 	"bodysplitter": [
 		"SPLIT        : SECTION|TTS::|TTS2::"
 	],
-//flags for detected fields
+//flags for body fields
 	"flags": {
 //name of field in lowercase
-//flag "g" means if several matches found they are summed in one filed with "|" divider
+//flag "g" means if several matches found they are summed in one field with "|" divider
+//flag "gn" means if several matches found they are grouped with new line as divider
 //flags are accumulates in one string
-		"ticketno":"g"
+		"ticketno":"gn"
 	},
 
 //name of template to fill for report
 	"template":"template1"
 //template can be either located in separate file in templates folder, or included in rule in "templatebody" tag.
+//see template structure below
 }
 
 
@@ -64,26 +66,36 @@ rule file
 		"to":"asd@asd.com",
 //what mailbox to use
 		"mailbox":"asd@asd.com",
+//MIME-type of report letter. Default text/plain
+		"mimetype":"text/html",
 //report format
 		"format":[
-//report sections divided with <#section> string
+//report sections divided with <#section> keyword
 //section with no fields will appear only once in report
 			"date       time    booking     ticket         from                              folder",
 			"<#section>",
+
+//system fields
+//<#section> - report sections divider
 //<#mdate> - email date
 //<#mtime> - email time
-//<event#-7> - field having #... suffix will be sprintf formatted. only width/positioning supported
 //<#mfrom> - from
 //<#mfolder> - rule folder
+
+//fields
+//all non-special fields are body/subject fields with "_" prefix. That is how they can be distinguished from HTML tags.
+//<_event#-7> - field having #... suffix will be sprintf formatted. only width/positioning supported
+
 //filed name in UPPER CASE means this field is required to be filled to be printed in this section
 //required fields is the way to split different fieldsets to different report sections
-			"<#mdate> <#mtime> <tourno>	<event#-7> <PNRNO#5> <TICKETNO#13> <#mfrom#-50> <#mfolder>",
+			"<#mdate> <#mtime> <_tourno>	<_event#-7> <_PNRNO#5> <_TICKETNO#13> <#mfrom#-50> <#mfolder>",
 //we can have multiple sections, each with its own required fields
 			"<#section>",
 			"date       time     booking     country                        name",
 			"<#section>",
-			"<#mdate> <#mtime> <tourno>	<event#7> <fdate#10> <COUNTRY#-25> <name>",
+			"<#mdate> <#mtime> <_tourno>	<_event#7> <_fdate#10> <_COUNTRY#-25> <_name>",
 		],
+
 //report email subject
 //RPT: prefix will be autimatically added to each subject
 		"subject":"UNI выписка",

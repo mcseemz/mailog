@@ -258,10 +258,10 @@ public class Main {
 
     /** Executor service for idleListeners */
     public static final ExecutorService listenerExecutor = Executors.newCachedThreadPool();
-    final public static Pattern fieldsPattern = Pattern.compile("<(#?\\w+)>");
-    final public static Pattern fieldsFormatPattern = Pattern.compile("<(#?\\w+)(#.?\\d+\\w?)?>");
+    final public static Pattern fieldsPattern = Pattern.compile("<(\\w+)>");
+    final public static Pattern fieldsFormatPattern = Pattern.compile("<(#|_)(\\w+)(#.?\\d+\\w?)?>");
     static public WatchService watchService = null;
-    static public Thread fileWatcher = null;
+//    static public Thread fileWatcher = null;
 
     static WatchKey ftemplate;
     static WatchKey frule;

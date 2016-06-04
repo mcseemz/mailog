@@ -1,10 +1,10 @@
 # mailog
-Rulebased mail manager for processing templated logs on email.<br>Made for people whose production logs/alerts are sent to email.
+Rule-based mail manager for templated emails processing.<br>Made for people whose production logs/alerts are sent to email.
 Squeezes data from matched emails into formatted reports and sends them back (or anywhere).
 
-version 0.4-beta
+version 0.5-beta
 
-Works in two modes - archiver and monitor.<br>
+It works in two modes - archiver and monitor.<br>
 <b>Archiver</b> connects to all specified folders on specified mailboxes, parses all messages one-time, rule-matching them.<br>
 <b>Monitor</b> looks for specified folders activity using the same rule-matching logic realtime.
 
@@ -24,11 +24,11 @@ alert - notification email sent when activity conditions are met.
 
 
 <h3>High-level mechanics</h3>
-IMAP does no allow to filter server-side using regexp, so all emails downloaded.
+IMAP does no allow to filter server-side using regexp, so all emails sequentially downloaded.
 
 1. Email body split to sections and these sections are used to fill fieldsets along with fields parsed from subject.<br>
-2. Each fieldset passed to according template's report.<br>
-3. After template record limit reached, report email sent to specified mailbox. Then all participated emails deleted.<br>
+2. Each fieldset passed to specified template's report.<br>
+3. After template record limit reached, email with report sent to specified mailbox. Then all participated emails deleted (or not, as configured).<br>
 
 <h3>Mailboxes, Rules and Templates description</h3>
 for detailed commented description check <a href='json-description.txt'>json-description.txt</a>
@@ -40,7 +40,8 @@ Sections have two aspects in <b>mailog</b>:
  It covers scenario where you have several similar records in one email so you need several records in output report.
  Another scenario is several distinct parts in email that go to defferent report parts.
 
- Body rules applies to each section, but in the end at least one mandatory field shoud be filled, so the system knows that this section has something valuable and should pass info to template
+ Body rules applies to each section, but in the end at least one mandatory field shoud be filled, so the system knows that this section has something valuable and should pass info to template.
+ Each rule apply to whole section at once, so you should assume that DOTALL and MULTILINE regexp specifiers always included. 
 
  2. template composition<br>
  template can be split by sections, each with it's own formatting. For example, header section with static text and no fields.
@@ -49,10 +50,9 @@ Sections have two aspects in <b>mailog</b>:
 
 <h3>Alerts</h3>
 Alerts are used to detect increase of activity in corresponding template.
-Basically they count records added to template. Upon reaching the predefined limit for predifined period they send letter
-with basic statictics and parsed details on last record.
+Basically they count records added to template. Upon reaching the predefined limit for predifined period the letter is sent with basic statictics and parsed details on last record.
 
-Alerts defined in template. You can define thas much as you want, they act independently.
+Alerts defined in template. You can define as much as you want, they act independently.
 frequency defined in "5m" style, where quantifier can be 'm' or 'h'.
 Also, keyword 'today' supported to count only events since 00:00
 

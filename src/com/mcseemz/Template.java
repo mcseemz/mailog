@@ -40,6 +40,8 @@ public class Template {
     public boolean toSend = true;
     public boolean toDelete = true;
     public boolean toUnseen = false;
+    public String mimetype = "text/plain";
+
     /**блокирующий объект. по нему блокируем при обновлениишаблона*/
     public final Boolean block = Boolean.TRUE;
 
@@ -81,6 +83,7 @@ public class Template {
                     if (tokenname.equals("subject")) template.report_subject = reader.nextString();
                     if (tokenname.equals("to")) template.report_to = reader.nextString();
                     if (tokenname.equals("mailbox")) template.report_mailbox = reader.nextString();
+                    if (tokenname.equals("mimetype")) template.mimetype = reader.nextString();
                     if (tokenname.equals("send")) template.toSend = reader.nextBoolean();
                     if (tokenname.equals("delete")) template.toDelete = reader.nextBoolean();
                     if (tokenname.equals("seen")) template.toUnseen = !reader.nextBoolean();
@@ -124,8 +127,8 @@ public class Template {
 
                 Matcher fieldsMatcher = Main.fieldsFormatPattern.matcher(line);
                 while (fieldsMatcher.find())
-                    if (!fieldsMatcher.group(1).contains(Main.KEYWORD_SECTION))
-                        section.usedFields.add(fieldsMatcher.group(1)+(fieldsMatcher.group(2)==null ? "" : fieldsMatcher.group(2)));
+                    if (!(fieldsMatcher.group(1)+fieldsMatcher.group(2)).contains(Main.KEYWORD_SECTION))
+                        section.usedFields.add(fieldsMatcher.group(1)+fieldsMatcher.group(2)+(fieldsMatcher.group(3)==null ? "" : fieldsMatcher.group(3)));
             }
             if (section.usedFields.isEmpty()) {
                 section.oneTime = true; //один раз выводим
@@ -184,7 +187,7 @@ public class Template {
 
 
         for (Section section : sections) {
-            logger.info("template: section start "+section.format.size()+" "+section.oneTime+" "+section.records);
+            logger.info("template: section start " + section.format.size() + " " + section.oneTime + " " + section.records);
             if (section.format.isEmpty()) section.records++;    //просто считаем письма
             if (section.oneTime && section.records > 0) continue;   //если вообще нет полей
 
@@ -195,7 +198,7 @@ public class Template {
                 if (record.containsKey(usedField.toLowerCase()))  notEmpty = true;
                 //если поле обязательное, а его нет
                 if (!record.containsKey(usedField.toLowerCase()) && !usedField.toLowerCase().equals(usedField)) {
-                    logger.info("template: no required field: "+usedField);
+                    logger.info("template: no required field: " + usedField);
                     notEmpty = false;
                     break;
                 }
@@ -256,7 +259,7 @@ public class Template {
         if (toSend)
             try {
                 Main.Mailbox mailbox = Main.mappedmailboxes.get(report_mailbox);
-                sendEmail(mailbox, this.report_to, "RPT: "+this.report_subject, report, "text/plain; charset=UTF-8");
+                sendEmail(mailbox, this.report_to, "RPT: "+this.report_subject, report, this.mimetype+"; charset=UTF-8");
             } catch (MessagingException e) {
                 e.printStackTrace();
             }
